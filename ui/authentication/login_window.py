@@ -2,7 +2,7 @@ import customtkinter as ctk
 from services.auth_service import authenticate_user
 from database.connection import test_connection
 from config import settings
-
+from ui.dashboard.main_window import MainWindow
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
@@ -142,7 +142,8 @@ class LoginWindow(ctk.CTk):
         success, message, user = authenticate_user(username, password)
 
         if success:
-            print("Login successful")
-            print(user)
+            self.destroy()
+            main_window = MainWindow(user)
+            main_window.mainloop()
         else:
             print("Login failed:", message)
