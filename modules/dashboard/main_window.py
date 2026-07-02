@@ -1,6 +1,9 @@
 import customtkinter as ctk
+
 from config import settings
+from core.navigation.navigation_service import NavigationService
 from modules.quotation.views.quotation_view import QuotationView
+from modules.quotation.views.material_request_view import MaterialRequestView
 
 
 class JCAPTheme:
@@ -37,37 +40,20 @@ class MainWindow(ctk.CTk):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        self.sidebar = ctk.CTkFrame(
-            self,
-            width=250,
-            corner_radius=0,
-            fg_color=JCAPTheme.DARK_BLUE
-        )
+        self.sidebar = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color=JCAPTheme.DARK_BLUE)
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
         self.sidebar.grid_propagate(False)
 
-        self.header = ctk.CTkFrame(
-            self,
-            height=70,
-            corner_radius=0,
-            fg_color=JCAPTheme.CARD_BG
-        )
+        self.header = ctk.CTkFrame(self, height=70, corner_radius=0, fg_color=JCAPTheme.CARD_BG)
         self.header.grid(row=0, column=1, sticky="ew")
         self.header.grid_propagate(False)
 
-        self.workspace = ctk.CTkFrame(
-            self,
-            corner_radius=0,
-            fg_color=JCAPTheme.BG_LIGHT
-        )
+        self.workspace = ctk.CTkFrame(self, corner_radius=0, fg_color=JCAPTheme.BG_LIGHT)
         self.workspace.grid(row=1, column=1, sticky="nsew", padx=15, pady=15)
 
-        self.status_bar = ctk.CTkFrame(
-            self,
-            height=35,
-            corner_radius=0,
-            fg_color=JCAPTheme.CARD_BG
-        )
+        self.navigation = NavigationService(self.workspace)
+
+        self.status_bar = ctk.CTkFrame(self, height=35, corner_radius=0, fg_color=JCAPTheme.CARD_BG)
         self.status_bar.grid(row=2, column=1, sticky="ew")
         self.status_bar.grid_propagate(False)
 
@@ -81,7 +67,7 @@ class MainWindow(ctk.CTk):
             self.sidebar,
             text="JCAP",
             font=("Segoe UI", 28, "bold"),
-            text_color="white"
+            text_color="white",
         )
         logo.pack(pady=(35, 5))
 
@@ -89,7 +75,7 @@ class MainWindow(ctk.CTk):
             self.sidebar,
             text="CONSTRUCTION SUITE",
             font=("Segoe UI", 12, "bold"),
-            text_color="#DDEBFF"
+            text_color="#DDEBFF",
         )
         subtitle.pack(pady=(0, 30))
 
@@ -119,7 +105,7 @@ class MainWindow(ctk.CTk):
                 hover_color=JCAPTheme.PRIMARY_BLUE_LIGHT,
                 text_color="white",
                 corner_radius=8,
-                command=item["command"]
+                command=item["command"],
             )
             button.pack(pady=4, padx=20)
 
@@ -128,7 +114,7 @@ class MainWindow(ctk.CTk):
             self.header,
             text="JCAP CONSTRUCTION SUITE",
             font=("Segoe UI", 24, "bold"),
-            text_color=JCAPTheme.DARK_BLUE
+            text_color=JCAPTheme.DARK_BLUE,
         )
         title.pack(side="left", padx=25)
 
@@ -136,7 +122,7 @@ class MainWindow(ctk.CTk):
             self.header,
             text=f"{self.user['full_name']}  |  {self.user['role']}",
             font=("Segoe UI", 13),
-            text_color=JCAPTheme.TEXT_MUTED
+            text_color=JCAPTheme.TEXT_MUTED,
         )
         user_info.pack(side="right", padx=25)
 
@@ -155,37 +141,42 @@ class MainWindow(ctk.CTk):
         self.build_dashboard()
 
     def show_quotation_module(self):
-        self.clear_workspace()
+        self.navigation.navigate(
+            QuotationView,
+            self.user,
+            on_new_request=self.show_new_material_request,
+        )
 
-        quotation_view = QuotationView(self.workspace, self.user)
-        quotation_view.pack(fill="both", expand=True)
+    def show_new_material_request(self):
+        self.navigation.navigate(
+            MaterialRequestView,
+            self.user,
+            on_back=self.show_quotation_module,
+        )
 
     def show_coming_soon(self):
         self.clear_workspace()
 
-        frame = ctk.CTkFrame(
-            self.workspace,
-            fg_color=JCAPTheme.CARD_BG,
-            corner_radius=14
-        )
+        frame = ctk.CTkFrame(self.workspace, fg_color=JCAPTheme.CARD_BG, corner_radius=14)
         frame.pack(fill="both", expand=True, padx=20, pady=20)
 
         ctk.CTkLabel(
             frame,
             text="Module Coming Soon",
             font=("Segoe UI", 28, "bold"),
-            text_color=JCAPTheme.DARK_BLUE
+            text_color=JCAPTheme.DARK_BLUE,
         ).pack(pady=(120, 10))
 
         ctk.CTkLabel(
             frame,
             text="This module is reserved for future JCAP Construction Suite development.",
             font=("Segoe UI", 15),
-            text_color=JCAPTheme.TEXT_MUTED
+            text_color=JCAPTheme.TEXT_MUTED,
         ).pack()
 
     def logout(self):
         self.destroy()
+
         from modules.authentication.login_window import LoginWindow
 
         login = LoginWindow()
@@ -199,7 +190,7 @@ class MainWindow(ctk.CTk):
             self.workspace,
             text="Dashboard",
             font=("Segoe UI", 26, "bold"),
-            text_color=JCAPTheme.TEXT_DARK
+            text_color=JCAPTheme.TEXT_DARK,
         )
         page_title.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 20))
 
@@ -211,31 +202,27 @@ class MainWindow(ctk.CTk):
         ]
 
         for index, (label, value) in enumerate(cards):
-            card = ctk.CTkFrame(
-                self.workspace,
-                fg_color=JCAPTheme.CARD_BG,
-                corner_radius=14
-            )
+            card = ctk.CTkFrame(self.workspace, fg_color=JCAPTheme.CARD_BG, corner_radius=14)
             card.grid(row=1, column=index, sticky="ew", padx=8, pady=5)
 
             ctk.CTkLabel(
                 card,
                 text=label,
                 font=("Segoe UI", 13),
-                text_color=JCAPTheme.TEXT_MUTED
+                text_color=JCAPTheme.TEXT_MUTED,
             ).pack(pady=(18, 5))
 
             ctk.CTkLabel(
                 card,
                 text=value,
                 font=("Segoe UI", 32, "bold"),
-                text_color=JCAPTheme.PRIMARY_BLUE
+                text_color=JCAPTheme.PRIMARY_BLUE,
             ).pack(pady=(0, 18))
 
         welcome_card = ctk.CTkFrame(
             self.workspace,
             fg_color=JCAPTheme.CARD_BG,
-            corner_radius=14
+            corner_radius=14,
         )
         welcome_card.grid(row=2, column=0, columnspan=4, sticky="nsew", padx=8, pady=20)
 
@@ -243,14 +230,14 @@ class MainWindow(ctk.CTk):
             welcome_card,
             text="Welcome to JCAP Construction Suite",
             font=("Segoe UI", 24, "bold"),
-            text_color=JCAPTheme.DARK_BLUE
+            text_color=JCAPTheme.DARK_BLUE,
         ).pack(pady=(60, 10))
 
         ctk.CTkLabel(
             welcome_card,
             text="Quotation Monitoring will be the first active module.",
             font=("Segoe UI", 15),
-            text_color=JCAPTheme.TEXT_MUTED
+            text_color=JCAPTheme.TEXT_MUTED,
         ).pack()
 
     def build_status_bar(self):
@@ -258,6 +245,6 @@ class MainWindow(ctk.CTk):
             self.status_bar,
             text="● System Online   |   PostgreSQL Connected   |   Version 1.0.0-dev.1",
             font=("Segoe UI", 12),
-            text_color=JCAPTheme.GREEN
+            text_color=JCAPTheme.GREEN,
         )
         status.pack(side="left", padx=20)
