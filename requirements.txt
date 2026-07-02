@@ -1,1 +1,10 @@
 bcrypt
+customtkinter
+pillow
+psycopg2-binary
+sqlalchemy
+alembic
+python-dotenv
+bcrypt
+tkcalendar
+pyinstaller

@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from config import settings
+from modules.quotation.views.quotation_view import QuotationView
 
 
 class JCAPTheme:
@@ -72,7 +73,7 @@ class MainWindow(ctk.CTk):
 
         self.build_sidebar()
         self.build_header()
-        self.build_dashboard()
+        self.show_dashboard()
         self.build_status_bar()
 
     def build_sidebar(self):
@@ -93,31 +94,32 @@ class MainWindow(ctk.CTk):
         subtitle.pack(pady=(0, 30))
 
         menu_items = [
-            "Dashboard",
-            "Quotation Monitoring",
-            "Supplier RFQ",
-            "Material Costing",
-            "Purchase Orders",
-            "Inventory",
-            "Invoice Monitoring",
-            "Reports",
-            "Administration",
-            "Settings",
-            "Logout"
+            {"text": "Dashboard", "command": self.show_dashboard},
+            {"text": "Quotation Monitoring", "command": self.show_quotation_module},
+            {"text": "Supplier RFQ", "command": self.show_coming_soon},
+            {"text": "Material Costing", "command": self.show_coming_soon},
+            {"text": "Purchase Orders", "command": self.show_coming_soon},
+            {"text": "Inventory", "command": self.show_coming_soon},
+            {"text": "Invoice Monitoring", "command": self.show_coming_soon},
+            {"text": "Reports", "command": self.show_coming_soon},
+            {"text": "Administration", "command": self.show_coming_soon},
+            {"text": "Settings", "command": self.show_coming_soon},
+            {"text": "Logout", "command": self.logout},
         ]
 
         for item in menu_items:
             button = ctk.CTkButton(
                 self.sidebar,
-                text=item,
+                text=item["text"],
                 width=210,
                 height=38,
                 anchor="w",
                 font=("Segoe UI", 13),
-                fg_color=JCAPTheme.PRIMARY_BLUE if item == "Dashboard" else "transparent",
+                fg_color=JCAPTheme.PRIMARY_BLUE if item["text"] == "Dashboard" else "transparent",
                 hover_color=JCAPTheme.PRIMARY_BLUE_LIGHT,
                 text_color="white",
-                corner_radius=8
+                corner_radius=8,
+                command=item["command"]
             )
             button.pack(pady=4, padx=20)
 
@@ -137,6 +139,57 @@ class MainWindow(ctk.CTk):
             text_color=JCAPTheme.TEXT_MUTED
         )
         user_info.pack(side="right", padx=25)
+
+    def clear_workspace(self):
+        for widget in self.workspace.winfo_children():
+            widget.destroy()
+
+        for col in range(10):
+            self.workspace.grid_columnconfigure(col, weight=0)
+
+        for row in range(10):
+            self.workspace.grid_rowconfigure(row, weight=0)
+
+    def show_dashboard(self):
+        self.clear_workspace()
+        self.build_dashboard()
+
+    def show_quotation_module(self):
+        self.clear_workspace()
+
+        quotation_view = QuotationView(self.workspace, self.user)
+        quotation_view.pack(fill="both", expand=True)
+
+    def show_coming_soon(self):
+        self.clear_workspace()
+
+        frame = ctk.CTkFrame(
+            self.workspace,
+            fg_color=JCAPTheme.CARD_BG,
+            corner_radius=14
+        )
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(
+            frame,
+            text="Module Coming Soon",
+            font=("Segoe UI", 28, "bold"),
+            text_color=JCAPTheme.DARK_BLUE
+        ).pack(pady=(120, 10))
+
+        ctk.CTkLabel(
+            frame,
+            text="This module is reserved for future JCAP Construction Suite development.",
+            font=("Segoe UI", 15),
+            text_color=JCAPTheme.TEXT_MUTED
+        ).pack()
+
+    def logout(self):
+        self.destroy()
+        from modules.authentication.login_window import LoginWindow
+
+        login = LoginWindow()
+        login.mainloop()
 
     def build_dashboard(self):
         self.workspace.grid_columnconfigure((0, 1, 2, 3), weight=1)
