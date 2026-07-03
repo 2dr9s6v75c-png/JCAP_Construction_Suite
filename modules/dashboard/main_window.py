@@ -4,6 +4,7 @@ from config import settings
 from core.navigation.navigation_service import NavigationService
 from modules.quotation.views.quotation_view import QuotationView
 from modules.quotation.views.material_request_view import MaterialRequestView
+from modules.quotation.views.material_request_details_view import MaterialRequestDetailsView
 
 
 class JCAPTheme:
@@ -40,20 +41,39 @@ class MainWindow(ctk.CTk):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        self.sidebar = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color=JCAPTheme.DARK_BLUE)
+        self.sidebar = ctk.CTkFrame(
+            self,
+            width=250,
+            corner_radius=0,
+            fg_color=JCAPTheme.DARK_BLUE
+        )
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
         self.sidebar.grid_propagate(False)
 
-        self.header = ctk.CTkFrame(self, height=70, corner_radius=0, fg_color=JCAPTheme.CARD_BG)
+        self.header = ctk.CTkFrame(
+            self,
+            height=70,
+            corner_radius=0,
+            fg_color=JCAPTheme.CARD_BG
+        )
         self.header.grid(row=0, column=1, sticky="ew")
         self.header.grid_propagate(False)
 
-        self.workspace = ctk.CTkFrame(self, corner_radius=0, fg_color=JCAPTheme.BG_LIGHT)
+        self.workspace = ctk.CTkFrame(
+            self,
+            corner_radius=0,
+            fg_color=JCAPTheme.BG_LIGHT
+        )
         self.workspace.grid(row=1, column=1, sticky="nsew", padx=15, pady=15)
 
         self.navigation = NavigationService(self.workspace)
 
-        self.status_bar = ctk.CTkFrame(self, height=35, corner_radius=0, fg_color=JCAPTheme.CARD_BG)
+        self.status_bar = ctk.CTkFrame(
+            self,
+            height=35,
+            corner_radius=0,
+            fg_color=JCAPTheme.CARD_BG
+        )
         self.status_bar.grid(row=2, column=1, sticky="ew")
         self.status_bar.grid_propagate(False)
 
@@ -63,21 +83,19 @@ class MainWindow(ctk.CTk):
         self.build_status_bar()
 
     def build_sidebar(self):
-        logo = ctk.CTkLabel(
+        ctk.CTkLabel(
             self.sidebar,
             text="JCAP",
             font=("Segoe UI", 28, "bold"),
             text_color="white",
-        )
-        logo.pack(pady=(35, 5))
+        ).pack(pady=(35, 5))
 
-        subtitle = ctk.CTkLabel(
+        ctk.CTkLabel(
             self.sidebar,
             text="CONSTRUCTION SUITE",
             font=("Segoe UI", 12, "bold"),
             text_color="#DDEBFF",
-        )
-        subtitle.pack(pady=(0, 30))
+        ).pack(pady=(0, 30))
 
         menu_items = [
             {"text": "Dashboard", "command": self.show_dashboard},
@@ -94,7 +112,7 @@ class MainWindow(ctk.CTk):
         ]
 
         for item in menu_items:
-            button = ctk.CTkButton(
+            ctk.CTkButton(
                 self.sidebar,
                 text=item["text"],
                 width=210,
@@ -106,25 +124,22 @@ class MainWindow(ctk.CTk):
                 text_color="white",
                 corner_radius=8,
                 command=item["command"],
-            )
-            button.pack(pady=4, padx=20)
+            ).pack(pady=4, padx=20)
 
     def build_header(self):
-        title = ctk.CTkLabel(
+        ctk.CTkLabel(
             self.header,
             text="JCAP CONSTRUCTION SUITE",
             font=("Segoe UI", 24, "bold"),
             text_color=JCAPTheme.DARK_BLUE,
-        )
-        title.pack(side="left", padx=25)
+        ).pack(side="left", padx=25)
 
-        user_info = ctk.CTkLabel(
+        ctk.CTkLabel(
             self.header,
             text=f"{self.user['full_name']}  |  {self.user['role']}",
             font=("Segoe UI", 13),
             text_color=JCAPTheme.TEXT_MUTED,
-        )
-        user_info.pack(side="right", padx=25)
+        ).pack(side="right", padx=25)
 
     def clear_workspace(self):
         for widget in self.workspace.winfo_children():
@@ -145,19 +160,38 @@ class MainWindow(ctk.CTk):
             QuotationView,
             self.user,
             on_new_request=self.show_new_material_request,
+            on_open_request=self.show_existing_material_request,
         )
-
     def show_new_material_request(self):
         self.navigation.navigate(
-            MaterialRequestView,
-            self.user,
-            on_back=self.show_quotation_module,
+        MaterialRequestView,
+        self.user,
+        on_back=self.show_quotation_module,
         )
-
+    def show_existing_material_request(self, material_request_id):
+        self.navigation.navigate(
+        MaterialRequestDetailsView,
+        self.user,
+        material_request_id=material_request_id,
+        on_back=self.show_quotation_module,
+        )
+    def show_existing_material_request(self, material_request_id):
+        self.navigation.navigate(
+        MaterialRequestDetailsView,
+        self.user,
+        material_request_id=material_request_id,
+        on_back=self.show_quotation_module,
+        )
+        
+        
     def show_coming_soon(self):
         self.clear_workspace()
 
-        frame = ctk.CTkFrame(self.workspace, fg_color=JCAPTheme.CARD_BG, corner_radius=14)
+        frame = ctk.CTkFrame(
+            self.workspace,
+            fg_color=JCAPTheme.CARD_BG,
+            corner_radius=14
+        )
         frame.pack(fill="both", expand=True, padx=20, pady=20)
 
         ctk.CTkLabel(
@@ -186,13 +220,12 @@ class MainWindow(ctk.CTk):
         self.workspace.grid_columnconfigure((0, 1, 2, 3), weight=1)
         self.workspace.grid_rowconfigure(2, weight=1)
 
-        page_title = ctk.CTkLabel(
+        ctk.CTkLabel(
             self.workspace,
             text="Dashboard",
             font=("Segoe UI", 26, "bold"),
             text_color=JCAPTheme.TEXT_DARK,
-        )
-        page_title.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 20))
+        ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 20))
 
         cards = [
             ("Total Material Requests", "0"),
@@ -202,7 +235,11 @@ class MainWindow(ctk.CTk):
         ]
 
         for index, (label, value) in enumerate(cards):
-            card = ctk.CTkFrame(self.workspace, fg_color=JCAPTheme.CARD_BG, corner_radius=14)
+            card = ctk.CTkFrame(
+                self.workspace,
+                fg_color=JCAPTheme.CARD_BG,
+                corner_radius=14
+            )
             card.grid(row=1, column=index, sticky="ew", padx=8, pady=5)
 
             ctk.CTkLabel(
@@ -241,10 +278,9 @@ class MainWindow(ctk.CTk):
         ).pack()
 
     def build_status_bar(self):
-        status = ctk.CTkLabel(
+        ctk.CTkLabel(
             self.status_bar,
             text="● System Online   |   PostgreSQL Connected   |   Version 1.0.0-dev.1",
             font=("Segoe UI", 12),
             text_color=JCAPTheme.GREEN,
-        )
-        status.pack(side="left", padx=20)
+        ).pack(side="left", padx=20)

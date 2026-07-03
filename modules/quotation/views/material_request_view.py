@@ -2,6 +2,7 @@ import customtkinter as ctk
 from datetime import date
 from tkinter import filedialog
 from modules.quotation.services.material_request_service import create_material_request
+from modules.quotation.components.request_toolbar import RequestToolbar
 import os
 
 from core.master_data.project_service import get_active_projects, get_active_users
@@ -37,43 +38,22 @@ class MaterialRequestView(ctk.CTkFrame):
         self.build_attachments_section()
 
     def build_toolbar(self):
-        toolbar = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=14)
-        toolbar.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 10))
+        self.toolbar = RequestToolbar(
+        self,
+        mode="create",
+        mr_number=None,
+        on_save=self.save_request,
+        on_back=self.on_back,
+        on_open_folder=self.open_folder_placeholder,
+        )
 
-        title_block = ctk.CTkFrame(toolbar, fg_color="transparent")
-        title_block.pack(side="left", padx=20, pady=14)
-
-        ctk.CTkLabel(
-            title_block,
-            text="Material Request Workspace",
-            font=("Segoe UI", 24, "bold"),
-            text_color="#0A2E63",
-        ).pack(anchor="w")
-
-        ctk.CTkLabel(
-            title_block,
-            text="Create a new material request for supplier quotation processing.",
-            font=("Segoe UI", 13),
-            text_color="#607D8B",
-        ).pack(anchor="w", pady=(2, 0))
-
-        ctk.CTkButton(
-            toolbar,
-            text="Back",
-            width=100,
-            fg_color="#607D8B",
-            hover_color="#455A64",
-            command=self.on_back,
-        ).pack(side="right", padx=10)
-
-        ctk.CTkButton(
-            toolbar,
-            text="Save",
-            width=120,
-            fg_color="#0D47A1",
-            hover_color="#0A2E63",
-            command=self.save_request,
-        ).pack(side="right", padx=10)
+        self.toolbar.grid(
+        row=0,
+        column=0,
+        sticky="ew",
+        padx=20,
+        pady=(20, 10),
+        )
 
     def build_request_info(self):
         section = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=14)
