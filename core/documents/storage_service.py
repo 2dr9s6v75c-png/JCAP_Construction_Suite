@@ -1,26 +1,12 @@
 import os
 import shutil
 import re
-from config import settings
+
 from core.documents.document_paths import (
-    get_project_root_folder,
-    ensure_project_procurement_folders,
+    get_project_folder,
+    get_project_procurement_folders,
     get_material_request_folder,
-    ensure_material_request_folder
 )
-
-
-PROJECT_PROCUREMENT_FOLDERS = [
-    "01 Material Requests",
-    "02 Supplier RFQ",
-    "03 Supplier Quotations",
-    "04 Quotation Evaluation",
-    "05 Purchase Orders",
-    "06 Delivery Receipts",
-    "07 Invoices",
-    "08 Supporting Documents",
-    "09 Archive",
-]
 
 
 def sanitize_folder_name(name: str) -> str:
@@ -30,36 +16,14 @@ def sanitize_folder_name(name: str) -> str:
     return name
 
 
-def get_project_folder_name(project_code: str, project_name: str) -> str:
-    project_code = project_code or "NO-CODE"
-    project_name = project_name or "Unnamed Project"
-    return sanitize_folder_name(f"{project_code} - {project_name}")
-
-
-def get_project_root_folder(project_code: str, project_name: str) -> str:
-    project_folder = get_project_folder_name(project_code, project_name)
-    return os.path.join(settings.DOCUMENT_ROOT, project_folder)
-
-
 def ensure_project_procurement_folders(project_code: str, project_name: str) -> str:
-    project_root = get_project_root_folder(project_code, project_name)
+    project_root = get_project_folder(project_code, project_name)
+    project_root.mkdir(parents=True, exist_ok=True)
 
-    os.makedirs(project_root, exist_ok=True)
+    for folder_path in get_project_procurement_folders(project_code, project_name):
+        folder_path.mkdir(parents=True, exist_ok=True)
 
-    for folder_name in PROJECT_PROCUREMENT_FOLDERS:
-        os.makedirs(os.path.join(project_root, folder_name), exist_ok=True)
-
-    return project_root
-
-
-def get_material_request_folder(project_code: str, project_name: str, request_no: str) -> str:
-    project_root = get_project_root_folder(project_code, project_name)
-
-    return os.path.join(
-        project_root,
-        "01 Material Requests",
-        request_no
-    )
+    return str(project_root)
 
 
 def ensure_material_request_folder(project_code: str, project_name: str, request_no: str) -> str:
@@ -68,12 +32,12 @@ def ensure_material_request_folder(project_code: str, project_name: str, request
     folder_path = get_material_request_folder(
         project_code,
         project_name,
-        request_no
+        request_no,
     )
 
-    os.makedirs(folder_path, exist_ok=True)
+    folder_path.mkdir(parents=True, exist_ok=True)
 
-    return folder_path
+    return str(folder_path)
 
 
 def copy_attachments_to_request_folder(

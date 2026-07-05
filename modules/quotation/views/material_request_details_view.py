@@ -2,6 +2,8 @@ from core.documents.document_service import DocumentService
 import customtkinter as ctk
 from datetime import datetime, date
 
+from modules.quotation.components.attachment_panel import AttachmentPanel
+
 from modules.quotation.services.material_request_service import (
     get_material_request,
     get_material_request_activity,
@@ -142,33 +144,15 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
     def build_attachments_tab(self, parent):
         parent.grid_columnconfigure(0, weight=1)
+        parent.grid_rowconfigure(0, weight=1)
 
-        if not self.request["attachments"]:
-            ctk.CTkLabel(
-                parent,
-                text="No attachments found.",
-                font=("Segoe UI", 14),
-                text_color="#607D8B",
-            ).pack(pady=40)
-            return
-
-        for attachment in self.request["attachments"]:
-            row = ctk.CTkFrame(parent, fg_color="#F5F7FA", corner_radius=10)
-            row.pack(fill="x", padx=15, pady=8)
-
-            ctk.CTkLabel(
-                row,
-                text=attachment["stored_filename"],
-                font=("Segoe UI", 13, "bold"),
-                text_color="#111827",
-            ).pack(side="left", padx=15, pady=12)
-
-            ctk.CTkLabel(
-                row,
-                text=f"{attachment['file_extension']} | {attachment['file_size']} bytes",
-                font=("Segoe UI", 12),
-                text_color="#607D8B",
-            ).pack(side="right", padx=15)
+        panel = AttachmentPanel(
+            parent,
+            attachments=self.request["attachments"],
+            on_open=self.open_attachment,
+            on_show_folder=self.show_attachment_folder,
+        )
+        panel.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
     def build_activity_tab(self, parent):
         if not self.activities:
@@ -241,3 +225,17 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
     def edit_placeholder(self):
         print(f"Edit {self.request['mr_number']}")
+
+    def open_attachment(self, attachment):
+        try:
+            DocumentService.open_material_request_attachment(
+                self.material_request_id,
+                attachment["stored_filename"],
+            )
+        except Exception as e:
+            print("Unable to open attachment:")
+            print(e)
+
+
+    def show_attachment_folder(self, attachment):
+        self.open_folder_placeholder()
