@@ -2,6 +2,12 @@ import os
 import shutil
 import re
 from config import settings
+from core.documents.document_paths import (
+    get_project_root_folder,
+    ensure_project_procurement_folders,
+    get_material_request_folder,
+    ensure_material_request_folder
+)
 
 
 PROJECT_PROCUREMENT_FOLDERS = [
