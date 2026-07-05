@@ -1,3 +1,4 @@
+from core.documents.document_service import DocumentService
 import customtkinter as ctk
 from datetime import datetime, date
 
@@ -5,8 +6,6 @@ from modules.quotation.services.material_request_service import (
     get_material_request,
     get_material_request_activity,
 )
-
-
 class MaterialRequestDetailsView(ctk.CTkFrame):
     def __init__(self, parent, user, material_request_id, on_back=None):
         super().__init__(parent, fg_color="#F5F7FA", corner_radius=0)
@@ -234,7 +233,11 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         return str(value or "")
 
     def open_folder_placeholder(self):
-        print(f"Open folder for {self.request['mr_number']}")
+        try:
+            DocumentService.open_material_request_folder(self.material_request_id)
+        except Exception as e:
+            print("Unable to open folder:")
+            print(e)
 
     def edit_placeholder(self):
         print(f"Edit {self.request['mr_number']}")

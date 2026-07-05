@@ -269,7 +269,7 @@ class QuotationView(ctk.CTkFrame):
             print("Callback is None")
 
     def open_folder_placeholder(self, request):
-        print(f"Open folder for: {request['mr_number']}")
+        print("Open Folder from list view will be connected after Details View Open Folder.")
 
     def get_priority_color(self, priority):
         colors = {

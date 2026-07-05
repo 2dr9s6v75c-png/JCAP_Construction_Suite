@@ -15,3 +15,9 @@ DOCUMENT_ROOT = os.getenv(
     "DOCUMENT_ROOT",
     r"\\192.168.50.39\JCAP Main Office Shared Folder\JCAP Purchasing\JCAP Quotation for Project Bidding"
 )
+
+DOCUMENT_ROOT = (
+    r"\\192.168.50.39\JCAP Main Office Shared Folder"
+    r"\JCAP Purchasing"
+    r"\JCAP Quotation for Project Bidding"
+)
