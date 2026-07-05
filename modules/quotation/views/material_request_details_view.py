@@ -7,15 +7,24 @@ from modules.quotation.components.attachment_panel import AttachmentPanel
 from modules.quotation.services.material_request_service import (
     get_material_request,
     get_material_request_activity,
+    lock_material_request,
 )
+from modules.quotation.services.material_request_service import lock_material_request
 class MaterialRequestDetailsView(ctk.CTkFrame):
-    def __init__(self, parent, user, material_request_id, on_back=None):
+    def __init__(
+        self,
+        parent,
+        user,
+        material_request_id,
+        on_back=None,
+        on_edit=None,
+    ):
         super().__init__(parent, fg_color="#F5F7FA", corner_radius=0)
 
         self.user = user
         self.material_request_id = material_request_id
         self.on_back = on_back
-
+        self.on_edit = on_edit
         self.request = get_material_request(material_request_id)
         self.activities = get_material_request_activity(material_request_id)
 
@@ -57,7 +66,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             width=100,
             fg_color="#0D47A1",
             hover_color="#0A2E63",
-            command=self.edit_placeholder,
+            command=self.edit_material_request,
         ).pack(side="right", padx=10)
 
         ctk.CTkButton(
@@ -224,7 +233,18 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             print(e)
 
     def edit_placeholder(self):
-        print(f"Edit {self.request['mr_number']}")
+        try:
+            result = lock_material_request(self.material_request_id, self.user)
+
+            if not result["success"]:
+                print(result["message"])
+                return
+
+            print(f"Edit allowed for {self.request['mr_number']}")
+
+        except Exception as e:
+            print("Unable to lock Material Request:")
+            print(e)
 
     def open_attachment(self, attachment):
         try:
@@ -239,3 +259,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
     def show_attachment_folder(self, attachment):
         self.open_folder_placeholder()
+
+    def edit_material_request(self):
+        if self.on_edit:
+            self.on_edit(self.material_request_id)

@@ -393,3 +393,211 @@ def get_material_request_activity(material_request_id: str):
         }
         for row in rows
     ]
+from datetime import datetime, timedelta
+
+
+LOCK_TIMEOUT_MINUTES = 30
+
+
+def lock_material_request(material_request_id: str, user: dict):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT locked_by, lock_expires_at
+            FROM quotation.material_requests
+            WHERE id = %s
+            """,
+            (material_request_id,),
+        )
+
+        row = cur.fetchone()
+
+        if not row:
+            raise ValueError("Material Request not found.")
+
+        locked_by, lock_expires_at = row
+        now = datetime.now()
+
+        if locked_by and lock_expires_at and lock_expires_at > now and str(locked_by) != user["id"]:
+            return {
+                "success": False,
+                "message": "This Material Request is currently locked by another user.",
+            }
+
+        cur.execute(
+            """
+            UPDATE quotation.material_requests
+            SET
+                locked_by = %s,
+                locked_at = CURRENT_TIMESTAMP,
+                lock_expires_at = CURRENT_TIMESTAMP + INTERVAL '30 minutes'
+            WHERE id = %s
+            """,
+            (user["id"], material_request_id),
+        )
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": "Material Request locked successfully.",
+        }
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+def unlock_material_request(material_request_id: str, user: dict):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            UPDATE quotation.material_requests
+            SET
+                locked_by = NULL,
+                locked_at = NULL,
+                lock_expires_at = NULL
+            WHERE id = %s
+            AND locked_by = %s
+            """,
+            (material_request_id, user["id"]),
+        )
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cur.close()
+        conn.close()
+
+def get_material_request_lock_status(material_request_id: str):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT
+                mr.locked_by,
+                mr.locked_at,
+                mr.lock_expires_at,
+                u.full_name
+            FROM quotation.material_requests mr
+            LEFT JOIN core.users u ON mr.locked_by = u.id
+            WHERE mr.id = %s
+            """,
+            (material_request_id,),
+        )
+
+        row = cur.fetchone()
+
+        if not row:
+            return {
+                "locked": False,
+                "message": "Material Request not found.",
+            }
+
+        locked_by, locked_at, lock_expires_at, locked_by_name = row
+
+        if not locked_by:
+            return {
+                "locked": False,
+                "locked_by": None,
+                "locked_by_name": None,
+                "locked_at": None,
+                "lock_expires_at": None,
+            }
+
+        return {
+            "locked": True,
+            "locked_by": str(locked_by),
+            "locked_by_name": locked_by_name or "Unknown User",
+            "locked_at": locked_at,
+            "lock_expires_at": lock_expires_at,
+        }
+
+    finally:
+        cur.close()
+        conn.close()
+
+        
+def update_material_request(material_request_id: str, data: dict, user: dict):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            UPDATE quotation.material_requests
+            SET
+                material_request_description = %s,
+                request_description = %s,
+                assigned_to = %s,
+                priority = %s,
+                due_date = %s,
+                remarks = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            RETURNING mr_number
+            """,
+            (
+                data["material_request_description"],
+                data["material_request_description"],
+                data["assigned_to"],
+                data["priority"],
+                data["due_date"],
+                data["remarks"],
+                material_request_id,
+            ),
+        )
+
+        result = cur.fetchone()
+
+        if not result:
+            raise ValueError("Material Request not found.")
+
+        mr_number = result[0]
+
+        cur.execute(
+            """
+            INSERT INTO core.activity_logs (
+                user_id,
+                action,
+                module,
+                record_id,
+                details
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                user["id"],
+                "UPDATE",
+                "Quotation Monitoring",
+                material_request_id,
+                f"Updated Material Request {mr_number}",
+            ),
+        )
+
+        conn.commit()
+        return mr_number
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cur.close()
+        conn.close()

@@ -5,6 +5,7 @@ from core.navigation.navigation_service import NavigationService
 from modules.quotation.views.quotation_view import QuotationView
 from modules.quotation.views.material_request_view import MaterialRequestView
 from modules.quotation.views.material_request_details_view import MaterialRequestDetailsView
+from modules.quotation.views.material_request_edit_view import MaterialRequestEditView
 
 
 class JCAPTheme:
@@ -170,18 +171,19 @@ class MainWindow(ctk.CTk):
         )
     def show_existing_material_request(self, material_request_id):
         self.navigation.navigate(
-        MaterialRequestDetailsView,
-        self.user,
-        material_request_id=material_request_id,
-        on_back=self.show_quotation_module,
+            MaterialRequestDetailsView,
+            self.user,
+            material_request_id,
+            on_back=self.show_quotation_module,
+            on_edit=self.show_edit_material_request,
         )
-    def show_existing_material_request(self, material_request_id):
+    def show_edit_material_request(self, material_request_id):
         self.navigation.navigate(
-        MaterialRequestDetailsView,
+        MaterialRequestEditView,
         self.user,
-        material_request_id=material_request_id,
-        on_back=self.show_quotation_module,
-        )
+        material_request_id,
+        on_cancel=lambda: self.show_existing_material_request(material_request_id),
+        )    
         
         
     def show_coming_soon(self):
