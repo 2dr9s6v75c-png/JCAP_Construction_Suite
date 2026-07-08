@@ -1,15 +1,15 @@
 from core.documents.document_service import DocumentService
 import customtkinter as ctk
+from tkinter import messagebox
 from datetime import datetime, date
-
+from core.theme import JCAPTheme
 from modules.quotation.components.attachment_panel import AttachmentPanel
-
 from modules.quotation.services.material_request_service import (
     get_material_request,
     get_material_request_activity,
     lock_material_request,
+    archive_material_request,
 )
-from modules.quotation.services.material_request_service import lock_material_request
 class MaterialRequestDetailsView(ctk.CTkFrame):
     def __init__(
         self,
@@ -41,9 +41,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
     def build_header(self):
         header = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=14)
         header.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 10))
-
         title = self.request["mr_number"] if self.request else "Material Request"
-
         ctk.CTkLabel(
             header,
             text=title,
@@ -68,7 +66,14 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             hover_color="#0A2E63",
             command=self.edit_material_request,
         ).pack(side="right", padx=10)
-
+        ctk.CTkButton(
+            header,
+            text="Archive",
+            width=110,
+            fg_color="#FB8C00",
+            hover_color="#EF6C00",
+            command=self.archive_material_request,
+        ).pack(side="right", padx=10)
         ctk.CTkButton(
             header,
             text="Open Folder",
@@ -263,3 +268,42 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
     def edit_material_request(self):
         if self.on_edit:
             self.on_edit(self.material_request_id)
+    def archive_material_request(self):
+
+        if not self.request:
+            return
+
+        answer = messagebox.askyesno(
+            "Archive Material Request",
+            (
+                f"Archive Material Request\n\n"
+                f"{self.request['mr_number']} ?\n\n"
+                "The request will disappear from active records.\n"
+                "It can be restored later by an Administrator."
+            ),
+        )
+
+        if not answer:
+            return
+
+        try:
+
+            archive_material_request(
+                self.material_request_id,
+                self.user,
+            )
+
+            messagebox.showinfo(
+                "Success",
+                "Material Request archived successfully.",
+            )
+
+            if self.on_back:
+                self.on_back()
+
+        except Exception as e:
+
+            messagebox.showerror(
+                "Archive Failed",
+                str(e),
+            )

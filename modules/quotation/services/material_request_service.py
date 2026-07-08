@@ -601,3 +601,58 @@ def update_material_request(material_request_id: str, data: dict, user: dict):
     finally:
         cur.close()
         conn.close()
+
+def archive_material_request(material_request_id: str, user: dict):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            UPDATE quotation.material_requests
+            SET
+                status = 'Archived',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            RETURNING mr_number
+            """,
+            (material_request_id,),
+        )
+
+        result = cur.fetchone()
+
+        if not result:
+            raise ValueError("Material Request not found.")
+
+        mr_number = result[0]
+
+        cur.execute(
+            """
+            INSERT INTO core.activity_logs (
+                user_id,
+                action,
+                module,
+                record_id,
+                details
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                user["id"],
+                "ARCHIVE",
+                "Quotation Monitoring",
+                material_request_id,
+                f"Archived Material Request {mr_number}",
+            ),
+        )
+
+        conn.commit()
+        return mr_number
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cur.close()
+        conn.close()
