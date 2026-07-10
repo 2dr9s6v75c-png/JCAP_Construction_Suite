@@ -1,6 +1,8 @@
+from pyexpat import errors
+
 import customtkinter as ctk
 from datetime import date
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 from modules.quotation.services.material_request_service import create_material_request
 from modules.quotation.components.request_toolbar import RequestToolbar
 import os
@@ -312,36 +314,47 @@ class MaterialRequestView(ctk.CTkFrame):
 
     def validate_request(self):
         errors = []
+        first_invalid = None
 
         selected_project = self.project_option.get()
         selected_assignee = self.assigned_to_option.get()
         material_description = self.material_description_entry.get().strip()
         due_date = self.due_date_entry.get().strip()
+        priority = self.priority_option.get()
 
         if selected_project == "No active projects":
             errors.append("Project / Site is required.")
 
-        if not material_description:
-            errors.append("Material Request Description is required.")
-
         if selected_assignee == "No active users":
             errors.append("Assigned To is required.")
 
+        if not material_description:
+            errors.append("Material Request Description is required.")
+            if first_invalid is None:
+                first_invalid = self.material_description_entry
+
+        if not priority:
+            errors.append("Priority is required.")
+
         if not due_date:
             errors.append("Due Date is required.")
+            if first_invalid is None:
+                first_invalid = self.due_date_entry
 
-        if not self.attachments:
-            errors.append("At least one attachment is required.")
-
-        return errors
+        return errors, first_invalid
 
     def save_request(self):
-        errors = self.validate_request()
+        errors, first_invalid = self.validate_request()
 
         if errors:
-            print("Validation errors:")
-            for error in errors:
-                print("-", error)
+            messagebox.showwarning(
+                "Validation Required",
+                "Please correct the following:\n\n" +
+                "\n".join(f"• {error}" for error in errors)
+            )
+
+        if first_invalid:
+            first_invalid.focus_set()
             return
 
         selected_project = self.project_option.get()

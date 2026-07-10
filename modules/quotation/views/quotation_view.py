@@ -1,4 +1,3 @@
-from aiohttp import request
 import customtkinter as ctk
 from datetime import datetime, date
 
@@ -8,18 +7,26 @@ from modules.quotation.services.material_request_service import get_material_req
 class QuotationView(ctk.CTkFrame):
     def __init__(self, parent, user, on_new_request=None, on_open_request=None):
         super().__init__(parent, fg_color="#F5F7FA", corner_radius=0)
+
         self.user = user
         self.on_new_request = on_new_request
         self.on_open_request = on_open_request
+
+        self.status_filter = "Active"
         self.requests = []
+        self.all_requests = []
+        self.filter_buttons = {}
+
         self.build_ui()
         self.load_requests()
 
     def build_ui(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)
+
         self.build_header()
         self.build_toolbar()
+        self.build_filter_bar()
         self.build_request_list()
 
     def build_header(self):
@@ -66,18 +73,42 @@ class QuotationView(ctk.CTkFrame):
         self.search_entry.grid(row=0, column=2, sticky="ew", padx=(0, 15), pady=12)
         self.search_entry.bind("<KeyRelease>", lambda event: self.render_requests())
 
+    def build_filter_bar(self):
+        self.filter_frame = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=14)
+        self.filter_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 10))
+
+        filters = ["All", "Active", "New", "Assigned", "In Progress", "Completed", "Archived"]
+
+        for index, status in enumerate(filters):
+            self.filter_frame.grid_columnconfigure(index, weight=1)
+
+            card = ctk.CTkButton(
+                self.filter_frame,
+                text=f"{status}\n0",
+                height=58,
+                fg_color="#F5F7FA",
+                hover_color="#E3EAF2",
+                text_color="#0A2E63",
+                font=("Segoe UI", 13, "bold"),
+                corner_radius=12,
+                command=lambda s=status: self.set_status_filter(s),
+            )
+            card.grid(row=0, column=index, sticky="ew", padx=8, pady=12)
+            self.filter_buttons[status] = card
+
     def build_request_list(self):
         container = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=14)
-        container.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 20))
+        container.grid(row=3, column=0, sticky="nsew", padx=20, pady=(0, 20))
         container.grid_columnconfigure(0, weight=1)
         container.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(
+        self.list_title = ctk.CTkLabel(
             container,
             text="Material Requests",
             font=("Segoe UI", 18, "bold"),
             text_color="#0A2E63",
-        ).grid(row=0, column=0, sticky="w", padx=20, pady=(15, 8))
+        )
+        self.list_title.grid(row=0, column=0, sticky="w", padx=20, pady=(15, 8))
 
         self.list_frame = ctk.CTkScrollableFrame(
             container,
@@ -86,15 +117,45 @@ class QuotationView(ctk.CTkFrame):
         )
         self.list_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
 
+    def set_status_filter(self, status):
+        self.status_filter = status
+        self.load_requests()
+
     def load_requests(self):
         try:
-            self.requests = get_material_requests()
+            self.all_requests = get_material_requests("All")
+            self.requests = get_material_requests(self.status_filter)
         except Exception as e:
             print("Failed to load material requests:")
             print(e)
+            self.all_requests = []
             self.requests = []
 
+        self.update_filter_counts()
         self.render_requests()
+
+    def update_filter_counts(self):
+        counts = {
+            "All": len(self.all_requests),
+            "Active": len([r for r in self.all_requests if r.get("status") != "Archived"]),
+            "New": len([r for r in self.all_requests if r.get("status") == "New"]),
+            "Assigned": len([r for r in self.all_requests if r.get("status") == "Assigned"]),
+            "In Progress": len([r for r in self.all_requests if r.get("status") == "In Progress"]),
+            "Completed": len([r for r in self.all_requests if r.get("status") == "Completed"]),
+            "Archived": len([r for r in self.all_requests if r.get("status") == "Archived"]),
+        }
+
+        for status, button in self.filter_buttons.items():
+            is_active = status == self.status_filter
+
+            button.configure(
+                text=f"{status}\n{counts.get(status, 0)}",
+                fg_color="#0D47A1" if is_active else "#F5F7FA",
+                hover_color="#0A2E63" if is_active else "#E3EAF2",
+                text_color="#FFFFFF" if is_active else "#0A2E63",
+            )
+
+        self.list_title.configure(text=f"Material Requests - {self.status_filter}")
 
     def render_requests(self):
         for widget in self.list_frame.winfo_children():
@@ -258,15 +319,8 @@ class QuotationView(ctk.CTkFrame):
         return str(value)
 
     def open_request_placeholder(self, request):
-        print("========== OPEN CLICKED ==========")
-        print(request)
-        print("Callback:", self.on_open_request)
-
         if self.on_open_request:
-            print("Calling callback...")
             self.on_open_request(request["id"])
-        else:
-            print("Callback is None")
 
     def open_folder_placeholder(self, request):
         print("Open Folder from list view will be connected after Details View Open Folder.")

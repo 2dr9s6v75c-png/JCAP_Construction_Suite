@@ -25,7 +25,13 @@ class RequestToolbar(ctk.CTkFrame):
 
     def build_ui(self):
         title_block = ctk.CTkFrame(self, fg_color="transparent")
-        title_block.pack(side="left", padx=20, pady=14)
+        title_block.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=20,
+            pady=14,
+        )
 
         title_text = "New Material Request"
         subtitle_text = "Create a new material request for supplier quotation processing."
@@ -34,7 +40,7 @@ class RequestToolbar(ctk.CTkFrame):
             title_text = self.mr_number or "Material Request"
             subtitle_text = "View material request details and attachments."
 
-        if self.mode == "edit":
+        elif self.mode == "edit":
             title_text = f"Edit {self.mr_number}" if self.mr_number else "Edit Material Request"
             subtitle_text = "Update material request information and attachments."
 
@@ -52,50 +58,71 @@ class RequestToolbar(ctk.CTkFrame):
             text_color="#607D8B",
         ).pack(anchor="w", pady=(2, 0))
 
-        ctk.CTkButton(
-            self,
-            text="Back",
-            width=100,
-            fg_color="#607D8B",
-            hover_color="#455A64",
-            command=self.on_back,
-        ).pack(side="right", padx=10)
+        button_frame = ctk.CTkFrame(self, fg_color="transparent")
+        button_frame.pack(side="right", padx=10, pady=14)
 
         if self.mode == "create":
             ctk.CTkButton(
-                self,
+                button_frame,
+                text="Back",
+                width=100,
+                fg_color="#607D8B",
+                hover_color="#455A64",
+                command=self.on_back,
+            ).pack(side="left", padx=5)
+
+            ctk.CTkButton(
+                button_frame,
                 text="Save",
                 width=120,
                 fg_color="#0D47A1",
                 hover_color="#0A2E63",
                 command=self.on_save,
-            ).pack(side="right", padx=10)
+            ).pack(side="left", padx=5)
 
         elif self.mode == "view":
             ctk.CTkButton(
-                self,
+                button_frame,
+                text="Back",
+                width=100,
+                fg_color="#607D8B",
+                hover_color="#455A64",
+                command=self.on_back,
+            ).pack(side="left", padx=5)
+
+            ctk.CTkButton(
+                button_frame,
                 text="Open Folder",
                 width=130,
                 fg_color="#607D8B",
                 hover_color="#455A64",
                 command=self.on_open_folder,
-            ).pack(side="right", padx=10)
+            ).pack(side="left", padx=5)
 
             ctk.CTkButton(
-                self,
+                button_frame,
                 text="Edit",
                 width=100,
                 fg_color="#0D47A1",
                 hover_color="#0A2E63",
                 command=self.on_edit,
-            ).pack(side="right", padx=10)
+            ).pack(side="left", padx=5)
 
         elif self.mode == "edit":
             ctk.CTkButton(
-                self,
+                button_frame,
+                text="Back",
+                width=100,
+                fg_color="#607D8B",
+                hover_color="#455A64",
+                command=self.on_back,
+            ).pack(side="left", padx=5)
+
+            ctk.CTkButton(
+                button_frame,
                 text="Save Changes",
                 width=140,
                 fg_color="#0D47A1",
                 hover_color="#0A2E63",
                 command=self.on_save,
-            ).pack(side="right", padx=10)
+            ).pack(side="left", padx=5)

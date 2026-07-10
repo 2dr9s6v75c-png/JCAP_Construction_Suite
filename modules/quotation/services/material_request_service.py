@@ -1,7 +1,19 @@
-from core.database.connection import get_connection
-from core.numbering.numbering_service import generate_document_number
-from core.documents.storage_service import copy_attachments_to_request_folder
+from datetime import datetime
 
+from core.database.connection import get_connection
+from core.documents.storage_service import copy_attachments_to_request_folder
+from core.lifecycle.document_lifecycle import DocumentLifecycle
+from core.logging.activity_logger import ActivityLogger
+from core.numbering.numbering_service import generate_document_number
+from core.security.permissions import PermissionService
+
+
+LOCK_TIMEOUT_MINUTES = 30
+
+
+# ============================================================
+# CREATE
+# ============================================================
 
 def create_material_request(data: dict, user: dict) -> str:
     conn = get_connection()
@@ -11,7 +23,7 @@ def create_material_request(data: dict, user: dict) -> str:
 
     try:
         saved_files = copy_attachments_to_request_folder(
-            attachments=data["attachments"],
+            attachments=data.get("attachments", []),
             project_code=data.get("project_code"),
             project_name=data["project_name"],
             request_no=mr_number,
@@ -35,7 +47,8 @@ def create_material_request(data: dict, user: dict) -> str:
                 created_by
             )
             VALUES (
-                %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s
             )
             RETURNING id
             """,
@@ -43,28 +56,22 @@ def create_material_request(data: dict, user: dict) -> str:
                 mr_number,
                 mr_number,
                 data["project_id"],
-
-                # Both columns receive the same value for now
                 data["material_request_description"],
                 data["material_request_description"],
-
                 data["requested_by"],
                 data["assigned_to"],
                 data["priority"],
                 "New",
                 data["due_date"],
-                data["remarks"],
-
+                data.get("remarks", ""),
                 mr_number,
-
                 user["id"],
             ),
         )
 
         material_request_id = cur.fetchone()[0]
 
-        for file in saved_files:
-
+        for file_data in saved_files:
             cur.execute(
                 """
                 INSERT INTO quotation.material_request_attachments (
@@ -76,41 +83,28 @@ def create_material_request(data: dict, user: dict) -> str:
                     relative_module,
                     uploaded_by
                 )
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     material_request_id,
-                    file["original_filename"],
-                    file["stored_filename"],
-                    file["file_extension"],
-                    file["file_size"],
-                    file["relative_module"],
+                    file_data["original_filename"],
+                    file_data["stored_filename"],
+                    file_data["file_extension"],
+                    file_data["file_size"],
+                    file_data["relative_module"],
                     user["id"],
                 ),
             )
 
-        cur.execute(
-            """
-            INSERT INTO core.activity_logs (
-                user_id,
-                action,
-                module,
-                record_id,
-                details
-            )
-            VALUES (%s,%s,%s,%s,%s)
-            """,
-            (
-                user["id"],
-                "CREATE",
-                "Quotation Monitoring",
-                material_request_id,
-                f"Created Material Request {mr_number}",
-            ),
+        ActivityLogger.log_create(
+            cur,
+            user_id=user["id"],
+            module=ActivityLogger.MODULE_QUOTATION,
+            record_id=material_request_id,
+            details=f"Created Material Request {mr_number}",
         )
 
         conn.commit()
-
         return mr_number
 
     except Exception:
@@ -121,195 +115,237 @@ def create_material_request(data: dict, user: dict) -> str:
         cur.close()
         conn.close()
 
-def get_material_requests():
+
+# ============================================================
+# LIST AND FILTER
+# ============================================================
+
+def get_material_requests(status_filter="Active"):
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute(
-        """
-        SELECT
-            mr.id,
-            mr.mr_number,
-            p.project_code,
-            p.project_name,
-            mr.material_request_description,
-            mr.requested_by,
-            mr.assigned_to,
-            mr.priority,
-            mr.status,
-            mr.due_date,
-            mr.created_at,
-            COUNT(att.id) AS attachment_count
-        FROM quotation.material_requests mr
-        JOIN core.projects p
-            ON mr.project_id = p.id
-        LEFT JOIN quotation.material_request_attachments att
-            ON mr.id = att.material_request_id
-        WHERE mr.status <> 'Archived'
-        GROUP BY
-            mr.id,
-            mr.mr_number,
-            p.project_code,
-            p.project_name,
-            mr.material_request_description,
-            mr.requested_by,
-            mr.assigned_to,
-            mr.priority,
-            mr.status,
-            mr.due_date,
-            mr.created_at
-        ORDER BY mr.created_at DESC
-        """
-    )
+    archived_status = DocumentLifecycle.ARCHIVED.value
 
-    rows = cur.fetchall()
+    where_clause = ""
+    params = []
 
-    cur.close()
-    conn.close()
+    if status_filter == "Active":
+        where_clause = "WHERE mr.status <> %s"
+        params.append(archived_status)
 
-    return [
-        {
-            "id": str(row[0]),
-            "mr_number": row[1],
-            "project_code": row[2] or "",
-            "project_name": row[3],
-            "description": row[4],
-            "requested_by": row[5],
-            "assigned_to": row[6],
-            "priority": row[7],
-            "status": row[8],
-            "due_date": row[9],
-            "created_at": row[10],
-            "attachment_count": row[11],
-        }
-        for row in rows
-    ]
+    elif status_filter == "Archived":
+        where_clause = "WHERE mr.status = %s"
+        params.append(archived_status)
+
+    elif status_filter != "All":
+        where_clause = "WHERE mr.status = %s"
+        params.append(status_filter)
+
+    try:
+        cur.execute(
+            f"""
+            SELECT
+                mr.id,
+                mr.mr_number,
+                p.project_code,
+                p.project_name,
+                mr.material_request_description,
+                mr.requested_by,
+                mr.assigned_to,
+                mr.priority,
+                mr.status,
+                mr.due_date,
+                mr.created_at,
+                COUNT(att.id) AS attachment_count
+            FROM quotation.material_requests mr
+            JOIN core.projects p
+                ON mr.project_id = p.id
+            LEFT JOIN quotation.material_request_attachments att
+                ON mr.id = att.material_request_id
+            {where_clause}
+            GROUP BY
+                mr.id,
+                mr.mr_number,
+                p.project_code,
+                p.project_name,
+                mr.material_request_description,
+                mr.requested_by,
+                mr.assigned_to,
+                mr.priority,
+                mr.status,
+                mr.due_date,
+                mr.created_at
+            ORDER BY mr.created_at DESC
+            """,
+            params,
+        )
+
+        rows = cur.fetchall()
+
+        return [
+            {
+                "id": str(row[0]),
+                "mr_number": row[1],
+                "project_code": row[2] or "",
+                "project_name": row[3],
+                "description": row[4],
+                "requested_by": row[5],
+                "assigned_to": row[6],
+                "priority": row[7],
+                "status": row[8],
+                "due_date": row[9],
+                "created_at": row[10],
+                "attachment_count": row[11],
+            }
+            for row in rows
+        ]
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ============================================================
+# GET SINGLE RECORD
+# ============================================================
+
 def get_material_request(material_request_id: str):
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute(
-        """
-        SELECT
-            mr.id,
-            mr.mr_number,
-            mr.project_id,
-            p.project_code,
-            p.project_name,
-            c.client_name,
-            p.location,
-            mr.material_request_description,
-            mr.requested_by,
-            mr.assigned_to,
-            mr.priority,
-            mr.status,
-            mr.due_date,
-            mr.remarks,
-            mr.folder_name,
-            mr.created_at
-        FROM quotation.material_requests mr
-        JOIN core.projects p ON mr.project_id = p.id
-        LEFT JOIN core.clients c ON p.client_id = c.id
-        WHERE mr.id = %s
-        """,
-        (material_request_id,)
-    )
+    try:
+        cur.execute(
+            """
+            SELECT
+                mr.id,
+                mr.mr_number,
+                mr.project_id,
+                p.project_code,
+                p.project_name,
+                c.client_name,
+                p.location,
+                mr.material_request_description,
+                mr.requested_by,
+                mr.assigned_to,
+                mr.priority,
+                mr.status,
+                mr.due_date,
+                mr.remarks,
+                mr.folder_name,
+                mr.created_at
+            FROM quotation.material_requests mr
+            JOIN core.projects p
+                ON mr.project_id = p.id
+            LEFT JOIN core.clients c
+                ON p.client_id = c.id
+            WHERE mr.id = %s
+            """,
+            (material_request_id,),
+        )
 
-    row = cur.fetchone()
+        row = cur.fetchone()
 
-    if not row:
+        if not row:
+            return None
+
+        cur.execute(
+            """
+            SELECT
+                original_filename,
+                stored_filename,
+                file_extension,
+                file_size,
+                relative_module,
+                uploaded_at
+            FROM quotation.material_request_attachments
+            WHERE material_request_id = %s
+            ORDER BY uploaded_at
+            """,
+            (material_request_id,),
+        )
+
+        attachments = cur.fetchall()
+
+        return {
+            "id": str(row[0]),
+            "mr_number": row[1],
+            "project_id": str(row[2]),
+            "project_code": row[3] or "",
+            "project_name": row[4],
+            "client_name": row[5] or "",
+            "location": row[6] or "",
+            "material_request_description": row[7],
+            "requested_by": row[8],
+            "assigned_to": row[9],
+            "priority": row[10],
+            "status": row[11],
+            "due_date": row[12],
+            "remarks": row[13] or "",
+            "folder_name": row[14],
+            "created_at": row[15],
+            "attachments": [
+                {
+                    "original_filename": attachment[0],
+                    "stored_filename": attachment[1],
+                    "file_extension": attachment[2],
+                    "file_size": attachment[3],
+                    "relative_module": attachment[4],
+                    "uploaded_at": attachment[5],
+                }
+                for attachment in attachments
+            ],
+        }
+
+    finally:
         cur.close()
         conn.close()
-        return None
 
-    cur.execute(
-        """
-        SELECT
-            original_filename,
-            stored_filename,
-            file_extension,
-            file_size,
-            relative_module,
-            uploaded_at
-        FROM quotation.material_request_attachments
-        WHERE material_request_id = %s
-        ORDER BY uploaded_at
-        """,
-        (material_request_id,)
-    )
 
-    attachments = cur.fetchall()
-
-    cur.close()
-    conn.close()
-
-    return {
-        "id": str(row[0]),
-        "mr_number": row[1],
-        "project_id": str(row[2]),
-        "project_code": row[3] or "",
-        "project_name": row[4],
-        "client_name": row[5] or "",
-        "location": row[6] or "",
-        "material_request_description": row[7],
-        "requested_by": row[8],
-        "assigned_to": row[9],
-        "priority": row[10],
-        "status": row[11],
-        "due_date": row[12],
-        "remarks": row[13] or "",
-        "folder_name": row[14],
-        "created_at": row[15],
-        "attachments": [
-            {
-                "original_filename": att[0],
-                "stored_filename": att[1],
-                "file_extension": att[2],
-                "file_size": att[3],
-                "relative_module": att[4],
-                "uploaded_at": att[5],
-            }
-            for att in attachments
-        ],
-    }
+# ============================================================
+# ACTIVITY TIMELINE
+# ============================================================
 
 def get_material_request_activity(material_request_id: str):
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute(
-        """
-        SELECT
-            al.action,
-            al.details,
-            al.created_at,
-            u.full_name
-        FROM core.activity_logs al
-        LEFT JOIN core.users u ON al.user_id = u.id
-        WHERE al.record_id = %s
-        ORDER BY al.created_at DESC
-        """,
-        (material_request_id,)
-    )
+    try:
+        cur.execute(
+            """
+            SELECT
+                al.action,
+                al.details,
+                al.created_at,
+                u.full_name
+            FROM core.activity_logs al
+            LEFT JOIN core.users u
+                ON al.user_id = u.id
+            WHERE al.record_id = %s
+            ORDER BY al.created_at DESC
+            """,
+            (material_request_id,),
+        )
 
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
+        rows = cur.fetchall()
 
-    return [
-        {
-            "action": row[0],
-            "details": row[1],
-            "created_at": row[2],
-            "user": row[3] or "System",
-        }
-        for row in rows
-    ]
-from datetime import datetime, timedelta
+        return [
+            {
+                "action": row[0],
+                "details": row[1],
+                "created_at": row[2],
+                "user": row[3] or "System",
+            }
+            for row in rows
+        ]
+
+    finally:
+        cur.close()
+        conn.close()
 
 
-LOCK_TIMEOUT_MINUTES = 30
-
+# ============================================================
+# LOCKING
+# ============================================================
 
 def lock_material_request(material_request_id: str, user: dict):
     conn = get_connection()
@@ -318,9 +354,12 @@ def lock_material_request(material_request_id: str, user: dict):
     try:
         cur.execute(
             """
-            SELECT locked_by, lock_expires_at
+            SELECT
+                locked_by,
+                lock_expires_at
             FROM quotation.material_requests
             WHERE id = %s
+            FOR UPDATE
             """,
             (material_request_id,),
         )
@@ -333,10 +372,18 @@ def lock_material_request(material_request_id: str, user: dict):
         locked_by, lock_expires_at = row
         now = datetime.now()
 
-        if locked_by and lock_expires_at and lock_expires_at > now and str(locked_by) != user["id"]:
+        if (
+            locked_by
+            and lock_expires_at
+            and lock_expires_at > now
+            and str(locked_by) != str(user["id"])
+        ):
             return {
                 "success": False,
-                "message": "This Material Request is currently locked by another user.",
+                "message": (
+                    "This Material Request is currently "
+                    "locked by another user."
+                ),
             }
 
         cur.execute(
@@ -345,10 +392,14 @@ def lock_material_request(material_request_id: str, user: dict):
             SET
                 locked_by = %s,
                 locked_at = CURRENT_TIMESTAMP,
-                lock_expires_at = CURRENT_TIMESTAMP + INTERVAL '30 minutes'
+                lock_expires_at =
+                    CURRENT_TIMESTAMP + INTERVAL '30 minutes'
             WHERE id = %s
             """,
-            (user["id"], material_request_id),
+            (
+                user["id"],
+                material_request_id,
+            ),
         )
 
         conn.commit()
@@ -380,9 +431,12 @@ def unlock_material_request(material_request_id: str, user: dict):
                 locked_at = NULL,
                 lock_expires_at = NULL
             WHERE id = %s
-            AND locked_by = %s
+              AND locked_by = %s
             """,
-            (material_request_id, user["id"]),
+            (
+                material_request_id,
+                user["id"],
+            ),
         )
 
         conn.commit()
@@ -394,6 +448,84 @@ def unlock_material_request(material_request_id: str, user: dict):
     finally:
         cur.close()
         conn.close()
+
+
+def force_unlock_material_request(
+    material_request_id: str,
+    user: dict,
+) -> str:
+    if not PermissionService.can_force_unlock_material_request(user):
+        raise PermissionError(
+            "Only an Administrator can force-unlock "
+            "a Material Request."
+        )
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT
+                mr.mr_number,
+                mr.locked_by,
+                u.full_name
+            FROM quotation.material_requests mr
+            LEFT JOIN core.users u
+                ON mr.locked_by = u.id
+            WHERE mr.id = %s
+            FOR UPDATE
+            """,
+            (material_request_id,),
+        )
+
+        row = cur.fetchone()
+
+        if not row:
+            raise ValueError("Material Request not found.")
+
+        mr_number, locked_by, locked_by_name = row
+
+        if not locked_by:
+            raise ValueError(
+                "This Material Request is not currently locked."
+            )
+
+        cur.execute(
+            """
+            UPDATE quotation.material_requests
+            SET
+                locked_by = NULL,
+                locked_at = NULL,
+                lock_expires_at = NULL
+            WHERE id = %s
+            """,
+            (material_request_id,),
+        )
+
+        ActivityLogger.log_force_unlock(
+            cur,
+            user_id=user["id"],
+            module=ActivityLogger.MODULE_QUOTATION,
+            record_id=material_request_id,
+            details=(
+                f"Force-unlocked Material Request {mr_number}. "
+                f"Previous lock owner: "
+                f"{locked_by_name or 'Unknown User'}"
+            ),
+        )
+
+        conn.commit()
+        return mr_number
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cur.close()
+        conn.close()
+
 
 def get_material_request_lock_status(material_request_id: str):
     conn = get_connection()
@@ -408,7 +540,8 @@ def get_material_request_lock_status(material_request_id: str):
                 mr.lock_expires_at,
                 u.full_name
             FROM quotation.material_requests mr
-            LEFT JOIN core.users u ON mr.locked_by = u.id
+            LEFT JOIN core.users u
+                ON mr.locked_by = u.id
             WHERE mr.id = %s
             """,
             (material_request_id,),
@@ -422,7 +555,28 @@ def get_material_request_lock_status(material_request_id: str):
                 "message": "Material Request not found.",
             }
 
-        locked_by, locked_at, lock_expires_at, locked_by_name = row
+        (
+            locked_by,
+            locked_at,
+            lock_expires_at,
+            locked_by_name,
+        ) = row
+
+        now = datetime.now()
+
+        # Treat expired locks as available.
+        if (
+            locked_by
+            and lock_expires_at
+            and lock_expires_at <= now
+        ):
+            return {
+                "locked": False,
+                "locked_by": None,
+                "locked_by_name": None,
+                "locked_at": None,
+                "lock_expires_at": None,
+            }
 
         if not locked_by:
             return {
@@ -436,7 +590,9 @@ def get_material_request_lock_status(material_request_id: str):
         return {
             "locked": True,
             "locked_by": str(locked_by),
-            "locked_by_name": locked_by_name or "Unknown User",
+            "locked_by_name": (
+                locked_by_name or "Unknown User"
+            ),
             "locked_at": locked_at,
             "lock_expires_at": lock_expires_at,
         }
@@ -445,8 +601,16 @@ def get_material_request_lock_status(material_request_id: str):
         cur.close()
         conn.close()
 
-        
-def update_material_request(material_request_id: str, data: dict, user: dict):
+
+# ============================================================
+# UPDATE
+# ============================================================
+
+def update_material_request(
+    material_request_id: str,
+    data: dict,
+    user: dict,
+):
     conn = get_connection()
     cur = conn.cursor()
 
@@ -471,7 +635,7 @@ def update_material_request(material_request_id: str, data: dict, user: dict):
                 data["assigned_to"],
                 data["priority"],
                 data["due_date"],
-                data["remarks"],
+                data.get("remarks", ""),
                 material_request_id,
             ),
         )
@@ -483,24 +647,12 @@ def update_material_request(material_request_id: str, data: dict, user: dict):
 
         mr_number = result[0]
 
-        cur.execute(
-            """
-            INSERT INTO core.activity_logs (
-                user_id,
-                action,
-                module,
-                record_id,
-                details
-            )
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            (
-                user["id"],
-                "UPDATE",
-                "Quotation Monitoring",
-                material_request_id,
-                f"Updated Material Request {mr_number}",
-            ),
+        ActivityLogger.log_update(
+            cur,
+            user_id=user["id"],
+            module=ActivityLogger.MODULE_QUOTATION,
+            record_id=material_request_id,
+            details=f"Updated Material Request {mr_number}",
         )
 
         conn.commit()
@@ -514,48 +666,151 @@ def update_material_request(material_request_id: str, data: dict, user: dict):
         cur.close()
         conn.close()
 
-def archive_material_request(material_request_id: str, user: dict):
+
+# ============================================================
+# ARCHIVE
+# ============================================================
+
+def archive_material_request(
+    material_request_id: str,
+    user: dict,
+):
+    if not PermissionService.can_archive_material_request(user):
+        raise PermissionError(
+            "You do not have permission to archive "
+            "Material Requests."
+        )
+
     conn = get_connection()
     cur = conn.cursor()
 
     try:
         cur.execute(
             """
-            UPDATE quotation.material_requests
-            SET
-                status = 'Archived',
-                updated_at = CURRENT_TIMESTAMP
+            SELECT
+                mr_number,
+                status
+            FROM quotation.material_requests
             WHERE id = %s
-            RETURNING mr_number
+            FOR UPDATE
             """,
             (material_request_id,),
         )
 
-        result = cur.fetchone()
+        row = cur.fetchone()
 
-        if not result:
+        if not row:
             raise ValueError("Material Request not found.")
 
-        mr_number = result[0]
+        mr_number, current_status = row
+
+        if DocumentLifecycle.is_archived(current_status):
+            raise ValueError(
+                "This Material Request is already archived."
+            )
 
         cur.execute(
             """
-            INSERT INTO core.activity_logs (
-                user_id,
-                action,
-                module,
-                record_id,
-                details
-            )
-            VALUES (%s, %s, %s, %s, %s)
+            UPDATE quotation.material_requests
+            SET
+                status = %s,
+                locked_by = NULL,
+                locked_at = NULL,
+                lock_expires_at = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
             """,
             (
-                user["id"],
-                "ARCHIVE",
-                "Quotation Monitoring",
+                DocumentLifecycle.ARCHIVED.value,
                 material_request_id,
-                f"Archived Material Request {mr_number}",
             ),
+        )
+
+        ActivityLogger.log_archive(
+            cur,
+            user_id=user["id"],
+            module=ActivityLogger.MODULE_QUOTATION,
+            record_id=material_request_id,
+            details=f"Archived Material Request {mr_number}",
+        )
+
+        conn.commit()
+        return mr_number
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ============================================================
+# RESTORE
+# ============================================================
+
+def restore_material_request(
+    material_request_id: str,
+    user: dict,
+) -> str:
+    if not PermissionService.can_restore_material_request(user):
+        raise PermissionError(
+            "You do not have permission to restore "
+            "Material Requests."
+        )
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT
+                mr_number,
+                status
+            FROM quotation.material_requests
+            WHERE id = %s
+            FOR UPDATE
+            """,
+            (material_request_id,),
+        )
+
+        row = cur.fetchone()
+
+        if not row:
+            raise ValueError("Material Request not found.")
+
+        mr_number, current_status = row
+
+        if not DocumentLifecycle.is_archived(current_status):
+            raise ValueError(
+                "Only archived Material Requests can be restored."
+            )
+
+        cur.execute(
+            """
+            UPDATE quotation.material_requests
+            SET
+                status = %s,
+                locked_by = NULL,
+                locked_at = NULL,
+                lock_expires_at = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            """,
+            (
+                DocumentLifecycle.RESTORED.value,
+                material_request_id,
+            ),
+        )
+
+        ActivityLogger.log_restore(
+            cur,
+            user_id=user["id"],
+            module=ActivityLogger.MODULE_QUOTATION,
+            record_id=material_request_id,
+            details=f"Restored Material Request {mr_number}",
         )
 
         conn.commit()
