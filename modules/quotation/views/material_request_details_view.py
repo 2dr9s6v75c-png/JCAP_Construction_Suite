@@ -2,6 +2,9 @@ from datetime import date, datetime
 
 import customtkinter as ctk
 
+from core.clarifications.clarification_service import (
+    ClarificationService,
+)
 from core.documents.document_service import DocumentService
 from core.lifecycle.document_lifecycle import DocumentLifecycle
 from core.notifications.notification_service import NotificationService
@@ -12,6 +15,9 @@ from modules.quotation.components.collaboration_banner import (
 )
 from modules.quotation.sections.activity_tab import ActivityTab
 from modules.quotation.sections.attachments_tab import AttachmentsTab
+from modules.quotation.sections.clarifications_tab import (
+    ClarificationsTab,
+)
 from modules.quotation.sections.details_header import DetailsHeader
 from modules.quotation.sections.information_tab import InformationTab
 from modules.quotation.sections.summary_cards import SummaryCards
@@ -31,6 +37,8 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         material_request_id,
         on_back=None,
         on_edit=None,
+        on_record_clarification=None,
+        on_open_clarification=None,
     ):
         super().__init__(
             parent,
@@ -40,14 +48,29 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
         self.user = user
         self.material_request_id = material_request_id
+
         self.on_back = on_back
         self.on_edit = on_edit
+        self.on_record_clarification = (
+            on_record_clarification
+        )
+        self.on_open_clarification = (
+            on_open_clarification
+        )
 
         self.request = get_material_request(
             material_request_id
         )
+
         self.activities = get_material_request_activity(
             material_request_id
+        )
+
+        self.clarifications = (
+            ClarificationService
+            .get_material_request_clarifications(
+                material_request_id
+            )
         )
 
         self.header = None
@@ -62,8 +85,15 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
     # ============================================================
 
     def build_ui(self):
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_columnconfigure(
+            0,
+            weight=1,
+        )
+
+        self.grid_rowconfigure(
+            3,
+            weight=1,
+        )
 
         self.build_header()
         self.build_summary()
@@ -72,7 +102,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
     def build_header(self):
         title = (
-            self.request.get("mr_number", "")
+            self.request.get(
+                "mr_number",
+                "",
+            )
             if self.request
             else "Material Request"
         )
@@ -99,13 +132,18 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         is_archived = self.is_archived()
 
         self.header.set_record_state(
-            "archived" if is_archived else "active"
+            (
+                "archived"
+                if is_archived
+                else "active"
+            )
         )
 
         self.header.set_archive_enabled(
             (
                 not is_archived
-                and PermissionService.can_archive_material_request(
+                and PermissionService
+                .can_archive_material_request(
                     self.user
                 )
             )
@@ -114,7 +152,8 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.header.set_edit_enabled(
             (
                 not is_archived
-                and PermissionService.can_edit_material_request(
+                and PermissionService
+                .can_edit_material_request(
                     self.user
                 )
             )
@@ -131,16 +170,25 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 },
                 {
                     "label": "Status",
-                    "value": self.request.get("status", ""),
+                    "value": self.request.get(
+                        "status",
+                        "",
+                    ),
                 },
                 {
                     "label": "Priority",
-                    "value": self.request.get("priority", ""),
+                    "value": self.request.get(
+                        "priority",
+                        "",
+                    ),
                 },
                 {
                     "label": "Attachments",
                     "value": len(
-                        self.request.get("attachments", [])
+                        self.request.get(
+                            "attachments",
+                            [],
+                        )
                     ),
                 },
             ]
@@ -192,9 +240,15 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         information_parent = self.tabview.add(
             "Information"
         )
+
         attachments_parent = self.tabview.add(
             "Attachments"
         )
+
+        clarifications_parent = self.tabview.add(
+            "Supplier Clarifications"
+        )
+
         activity_parent = self.tabview.add(
             "Activity Timeline"
         )
@@ -202,9 +256,15 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.build_information_tab(
             information_parent
         )
+
         self.build_attachments_tab(
             attachments_parent
         )
+
+        self.build_clarifications_tab(
+            clarifications_parent
+        )
+
         self.build_activity_tab(
             activity_parent
         )
@@ -304,6 +364,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             0,
             weight=1,
         )
+
         parent.grid_rowconfigure(
             0,
             weight=1,
@@ -336,6 +397,43 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             0,
             weight=1,
         )
+
+        parent.grid_rowconfigure(
+            0,
+            weight=1,
+        )
+
+    def build_clarifications_tab(self, parent):
+        can_record = (
+            not self.is_archived()
+            and PermissionService.has_permission(
+                self.user,
+                (
+                    "material_requests."
+                    "clarifications.record_supplier"
+                ),
+            )
+        )
+
+        section = ClarificationsTab(
+            parent,
+            clarifications=self.clarifications,
+            can_record=can_record,
+            on_record=self.record_supplier_clarification,
+            on_open=self.open_clarification,
+        )
+
+        section.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+
+        parent.grid_columnconfigure(
+            0,
+            weight=1,
+        )
+
         parent.grid_rowconfigure(
             0,
             weight=1,
@@ -357,10 +455,90 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             0,
             weight=1,
         )
+
         parent.grid_rowconfigure(
             0,
             weight=1,
         )
+
+    # ============================================================
+    # CLARIFICATION ACTIONS
+    # ============================================================
+
+    def record_supplier_clarification(self):
+        if not self.request:
+            return
+
+        if self.is_archived():
+            NotificationService.warning(
+                (
+                    "Supplier clarifications cannot be "
+                    "recorded for an archived "
+                    "Material Request."
+                ),
+                title="Clarification Unavailable",
+            )
+            return
+
+        if not PermissionService.has_permission(
+            self.user,
+            (
+                "material_requests."
+                "clarifications.record_supplier"
+            ),
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to record "
+                    "supplier clarifications."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        if self.on_record_clarification:
+            self.on_record_clarification(
+                self.material_request_id
+            )
+
+    def open_clarification(
+        self,
+        clarification,
+    ):
+        clarification_id = clarification.get(
+            "id"
+        )
+
+        if not clarification_id:
+            NotificationService.warning(
+                (
+                    "The selected clarification "
+                    "is unavailable."
+                ),
+                title="Clarification Unavailable",
+            )
+            return
+
+        if not PermissionService.has_permission(
+            self.user,
+            (
+                "material_requests."
+                "clarifications.view"
+            ),
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to view "
+                    "supplier clarifications."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        if self.on_open_clarification:
+            self.on_open_clarification(
+                clarification_id
+            )
 
     # ============================================================
     # DOCUMENT ACTIONS
@@ -373,7 +551,8 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         if self.is_archived():
             NotificationService.warning(
                 (
-                    "Archived Material Requests cannot be edited.\n\n"
+                    "Archived Material Requests "
+                    "cannot be edited.\n\n"
                     "Restore the record before editing it."
                 ),
                 title="Editing Disabled",
@@ -416,7 +595,8 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         if self.is_archived():
             NotificationService.info(
                 (
-                    "This Material Request is already archived."
+                    "This Material Request is "
+                    "already archived."
                 ),
                 title="Already Archived",
             )
@@ -426,8 +606,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             (
                 "Archive this Material Request?\n\n"
                 f"{self.request.get('mr_number', '')}\n\n"
-                "The request will disappear from active records.\n"
-                "It can be restored later by an authorized user."
+                "The request will disappear from "
+                "active records.\n"
+                "It can be restored later by an "
+                "authorized user."
             ),
             title="Archive Material Request",
         )
@@ -530,7 +712,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
     # COLLABORATION AND LOCK STATE
     # ============================================================
 
-    def handle_lock_status_change(self, status):
+    def handle_lock_status_change(
+        self,
+        status,
+    ):
         if not self.header:
             return
 
@@ -577,7 +762,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 error=error,
             )
 
-    def open_attachment(self, attachment):
+    def open_attachment(
+        self,
+        attachment,
+    ):
         stored_filename = attachment.get(
             "stored_filename"
         )
@@ -605,7 +793,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 error=error,
             )
 
-    def show_attachment_folder(self, attachment):
+    def show_attachment_folder(
+        self,
+        attachment,
+    ):
         self.open_folder()
 
     # ============================================================
@@ -625,7 +816,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             return False
 
         return DocumentLifecycle.is_archived(
-            self.request.get("status")
+            self.request.get(
+                "status"
+            )
         )
 
     def format_project(self):
@@ -638,6 +831,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
             or ""
         )
+
         name = (
             self.request.get(
                 "project_name"
@@ -653,18 +847,28 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
     @staticmethod
     def format_date(value):
-        if isinstance(value, date):
+        if isinstance(
+            value,
+            date,
+        ):
             return value.strftime(
                 "%d %b %Y"
             )
 
-        return str(value or "")
+        return str(
+            value or ""
+        )
 
     @staticmethod
     def format_datetime(value):
-        if isinstance(value, datetime):
+        if isinstance(
+            value,
+            datetime,
+        ):
             return value.strftime(
                 "%d %b %Y %I:%M %p"
             )
 
-        return str(value or "")
+        return str(
+            value or ""
+        )

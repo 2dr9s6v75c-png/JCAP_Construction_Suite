@@ -35,6 +35,9 @@ from modules.quotation.views.material_request_view import (
 from modules.quotation.views.quotation_view import (
     QuotationView,
 )
+from modules.quotation.views.record_supplier_clarification_view import (
+    RecordSupplierClarificationView,
+)
 
 
 class MainWindow(ctk.CTk):
@@ -506,18 +509,32 @@ class MainWindow(ctk.CTk):
         self,
         material_request_id,
     ):
+        self.set_active_navigation(
+            "quotation"
+        )
+
         self.navigation.navigate(
             MaterialRequestDetailsView,
             self.user,
             material_request_id,
             on_back=self.show_quotation_module,
             on_edit=self.show_edit_material_request,
+            on_record_clarification=(
+                self.show_record_supplier_clarification
+            ),
+            on_open_clarification=(
+                self.show_clarification_details
+            ),
         )
 
     def show_edit_material_request(
         self,
         material_request_id,
     ):
+        self.set_active_navigation(
+            "quotation"
+        )
+
         self.navigation.navigate(
             MaterialRequestEditView,
             self.user,
@@ -527,6 +544,88 @@ class MainWindow(ctk.CTk):
                     material_request_id
                 )
             ),
+        )
+
+    # ============================================================
+    # SUPPLIER CLARIFICATIONS
+    # ============================================================
+
+    def show_record_supplier_clarification(
+        self,
+        material_request_id,
+    ):
+        if not PermissionService.has_permission(
+            self.user,
+            (
+                "material_requests."
+                "clarifications.record_supplier"
+            ),
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to record "
+                    "supplier clarifications."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        self.set_active_navigation(
+            "quotation"
+        )
+
+        self.navigation.navigate(
+            RecordSupplierClarificationView,
+            self.user,
+            material_request_id,
+            on_cancel=lambda: (
+                self.show_existing_material_request(
+                    material_request_id
+                )
+            ),
+            on_saved=lambda clarification_id: (
+                self.handle_clarification_saved(
+                    material_request_id,
+                    clarification_id,
+                )
+            ),
+        )
+
+    def handle_clarification_saved(
+        self,
+        material_request_id,
+        clarification_id,
+    ):
+        self.show_existing_material_request(
+            material_request_id
+        )
+
+    def show_clarification_details(
+        self,
+        clarification_id,
+    ):
+        if not PermissionService.has_permission(
+            self.user,
+            (
+                "material_requests."
+                "clarifications.view"
+            ),
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to view "
+                    "supplier clarifications."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        NotificationService.info(
+            (
+                "The Supplier Clarification conversation "
+                "view will be connected in the next step."
+            ),
+            title="Supplier Clarification",
         )
 
     # ============================================================
