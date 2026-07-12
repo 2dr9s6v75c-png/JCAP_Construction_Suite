@@ -62,3 +62,16 @@
 - Added administration activity logging
 - Added legacy role compatibility during permission migration
 - Verified new user accounts with existing authentication system
+### Added
+- Added JCAP Construction Suite RBAC v1 permission registry.
+- Added approved default permission matrix for 9 system roles.
+- Added database-driven PermissionService.
+- Added fully hydrated RBAC authentication session data.
+- Added role-focused Roles & Permissions Administration UI.
+- Added protected System Administrator permission rules.
+- Added detailed role permission change audit logging.
+- Added RBAC-controlled Material Request creation UI and navigation guards.
+
+### Fixed
+- Fixed authenticated user sessions missing role_id and organization role data.
+- Fixed live RBAC permission changes not reflecting in Material Request UI.

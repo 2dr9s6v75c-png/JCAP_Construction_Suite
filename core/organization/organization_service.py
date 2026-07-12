@@ -36,6 +36,45 @@ class OrganizationService:
     EMPLOYEE_NUMBER_PREFIX = "JCAP"
     EMPLOYEE_NUMBER_DIGITS = 4
 
+    SYSTEM_ADMINISTRATOR_ROLE = "System Administrator"
+
+    PERMISSION_GROUPS = [
+        {"key": "material_requests", "title": "Material Requests",
+         "prefixes": ("material_requests.",),
+         "exclude_prefixes": ("material_requests.clarifications.",
+                              "material_requests.documents.",
+                              "material_requests.amendments.",
+                              "material_requests.revisions.")},
+        {"key": "clarifications", "title": "Clarifications",
+         "prefixes": ("material_requests.clarifications.",),
+         "exclude_prefixes": ()},
+        {"key": "documents", "title": "Documents",
+         "prefixes": ("material_requests.documents.",),
+         "exclude_prefixes": ()},
+        {"key": "amendments_revisions", "title": "Amendments & Revisions",
+         "prefixes": ("material_requests.amendments.",
+                      "material_requests.revisions."),
+         "exclude_prefixes": ()},
+        {"key": "supplier_rfq", "title": "Supplier RFQ",
+         "prefixes": ("supplier_rfq.",), "exclude_prefixes": ()},
+        {"key": "material_costing", "title": "Material Costing",
+         "prefixes": ("material_costing.",), "exclude_prefixes": ()},
+        {"key": "purchase_orders", "title": "Purchase Orders",
+         "prefixes": ("purchase_orders.",), "exclude_prefixes": ()},
+        {"key": "inventory", "title": "Inventory",
+         "prefixes": ("inventory.",), "exclude_prefixes": ()},
+        {"key": "receiving", "title": "Receiving",
+         "prefixes": ("receiving.",), "exclude_prefixes": ()},
+        {"key": "invoice_monitoring", "title": "Invoice Monitoring",
+         "prefixes": ("invoice_monitoring.",), "exclude_prefixes": ()},
+        {"key": "reports", "title": "Reports",
+         "prefixes": ("reports.",), "exclude_prefixes": ()},
+        {"key": "administration", "title": "Administration",
+         "prefixes": ("administration.",), "exclude_prefixes": ()},
+        {"key": "system", "title": "System",
+         "prefixes": ("settings.",), "exclude_prefixes": ()},
+    ]
+
     # ============================================================
     # USERS
     # ============================================================
@@ -297,6 +336,12 @@ class OrganizationService:
                 )
 
             update_data = {}
+            changes = []
+            password_changed = False
+
+            # ====================================================
+            # USERNAME
+            # ====================================================
 
             if "username" in data:
                 username = cls._clean_text(
@@ -317,7 +362,23 @@ class OrganizationService:
                         "Username already exists."
                     )
 
-                update_data["username"] = username
+                old_username = cls._clean_text(
+                    existing_user.get("username")
+                )
+
+                if username != old_username:
+                    update_data["username"] = username
+
+                    changes.append(
+                        (
+                            f"Username: "
+                            f"{old_username} → {username}"
+                        )
+                    )
+
+            # ====================================================
+            # FULL NAME
+            # ====================================================
 
             if "full_name" in data:
                 full_name = cls._clean_text(
@@ -329,25 +390,75 @@ class OrganizationService:
                         "Full name is required."
                     )
 
-                update_data["full_name"] = full_name
+                old_full_name = cls._clean_text(
+                    existing_user.get("full_name")
+                )
+
+                if full_name != old_full_name:
+                    update_data["full_name"] = full_name
+
+                    changes.append(
+                        (
+                            f"Full Name: "
+                            f"{old_full_name} → {full_name}"
+                        )
+                    )
+
+            # ====================================================
+            # EMAIL
+            # ====================================================
 
             if "email" in data:
                 email = cls._clean_text(
                     data.get("email")
                 )
 
-                update_data["email"] = (
-                    email or None
+                old_email = cls._clean_text(
+                    existing_user.get("email")
                 )
+
+                if email != old_email:
+                    update_data["email"] = (
+                        email or None
+                    )
+
+                    changes.append(
+                        (
+                            f"Email: "
+                            f"{old_email or 'None'} → "
+                            f"{email or 'None'}"
+                        )
+                    )
+
+            # ====================================================
+            # PHONE
+            # ====================================================
 
             if "phone" in data:
                 phone = cls._clean_text(
                     data.get("phone")
                 )
 
-                update_data["phone"] = (
-                    phone or None
+                old_phone = cls._clean_text(
+                    existing_user.get("phone")
                 )
+
+                if phone != old_phone:
+                    update_data["phone"] = (
+                        phone or None
+                    )
+
+                    changes.append(
+                        (
+                            f"Phone: "
+                            f"{old_phone or 'None'} → "
+                            f"{phone or 'None'}"
+                        )
+                    )
+
+            # ====================================================
+            # FINAL ORGANIZATION VALUES
+            # ====================================================
 
             final_role_id = data.get(
                 "role_id",
@@ -425,26 +536,107 @@ class OrganizationService:
                     "to the selected department."
                 )
 
-            if "role_id" in data:
+            # ====================================================
+            # ROLE CHANGE
+            # ====================================================
+
+            if (
+                "role_id" in data
+                and str(final_role_id)
+                != str(existing_user["role_id"])
+            ):
+                old_role_name = (
+                    existing_user.get("role_name")
+                    or existing_user.get("role")
+                    or "None"
+                )
+
+                new_role_name = role["role_name"]
+
                 update_data["role_id"] = (
                     final_role_id
                 )
 
                 update_data["role"] = (
                     cls._get_legacy_role_name(
-                        role["role_name"]
+                        new_role_name
                     )
                 )
 
-            if "department_id" in data:
+                changes.append(
+                    (
+                        f"Role: "
+                        f"{old_role_name} → {new_role_name}"
+                    )
+                )
+
+            # ====================================================
+            # DEPARTMENT CHANGE
+            # ====================================================
+
+            if (
+                "department_id" in data
+                and str(final_department_id)
+                != str(existing_user["department_id"])
+            ):
+                old_department_name = (
+                    existing_user.get(
+                        "department_name"
+                    )
+                    or "None"
+                )
+
+                new_department_name = (
+                    department["department_name"]
+                )
+
                 update_data["department_id"] = (
                     final_department_id
                 )
 
-            if "job_title_id" in data:
+                changes.append(
+                    (
+                        f"Department: "
+                        f"{old_department_name} → "
+                        f"{new_department_name}"
+                    )
+                )
+
+            # ====================================================
+            # JOB TITLE CHANGE
+            # ====================================================
+
+            if (
+                "job_title_id" in data
+                and str(final_job_title_id)
+                != str(existing_user["job_title_id"])
+            ):
+                old_job_title_name = (
+                    existing_user.get(
+                        "job_title_name"
+                    )
+                    or "None"
+                )
+
+                new_job_title_name = (
+                    job_title["job_title_name"]
+                )
+
                 update_data["job_title_id"] = (
                     final_job_title_id
                 )
+
+                changes.append(
+                    (
+                        f"Job Title: "
+                        f"{old_job_title_name} → "
+                        f"{new_job_title_name}"
+                    )
+                )
+
+            # ====================================================
+            # PASSWORD RESET
+            # ====================================================
 
             if "password" in data:
                 password = cls._clean_text(
@@ -465,6 +657,13 @@ class OrganizationService:
                     hash_password(password)
                 )
 
+                password_changed = True
+
+            if not changes and not password_changed:
+                raise ValueError(
+                    "No user account changes were detected."
+                )
+
             update_data["updated_by"] = (
                 current_user["id"]
             )
@@ -476,21 +675,42 @@ class OrganizationService:
             )
 
             if not updated:
-                raise ValueError(
-                    "No user account changes were saved."
+                raise RuntimeError(
+                    "User account changes were not saved."
                 )
 
-            ActivityLogger.log_update(
-                cur,
-                user_id=current_user["id"],
-                module=ActivityLogger.MODULE_ADMINISTRATION,
-                record_id=user_id,
-                details=(
-                    f"Updated user account "
-                    f"{existing_user['employee_number']} - "
-                    f"{existing_user['full_name']}"
-                ),
-            )
+            if changes:
+                change_details = "\n".join(
+                    f"- {change}"
+                    for change in changes
+                )
+
+                ActivityLogger.log_update(
+                    cur,
+                    user_id=current_user["id"],
+                    module=ActivityLogger.MODULE_ADMINISTRATION,
+                    record_id=user_id,
+                    details=(
+                        f"Updated user account "
+                        f"{existing_user['employee_number']} - "
+                        f"{existing_user['full_name']}.\n"
+                        f"Changes:\n"
+                        f"{change_details}"
+                    ),
+                )
+
+            if password_changed:
+                ActivityLogger.log_update(
+                    cur,
+                    user_id=current_user["id"],
+                    module=ActivityLogger.MODULE_ADMINISTRATION,
+                    record_id=user_id,
+                    details=(
+                        f"Password reset for user account "
+                        f"{existing_user['employee_number']} - "
+                        f"{existing_user['full_name']}."
+                    ),
+                )
 
             conn.commit()
 
@@ -743,6 +963,491 @@ class OrganizationService:
             )
         )
 
+    @classmethod
+    def get_permission_groups(cls) -> list[dict]:
+        """Return fresh copies of the approved RBAC v1 UI groups."""
+        return [
+            {
+                "key": group["key"],
+                "title": group["title"],
+                "prefixes": tuple(group["prefixes"]),
+                "exclude_prefixes": tuple(group["exclude_prefixes"]),
+            }
+            for group in cls.PERMISSION_GROUPS
+        ]
+
+    @classmethod
+    def get_roles_permission_overview(
+        cls,
+        current_user: dict,
+    ) -> list[dict]:
+        """Return active roles and permission counts for Administration."""
+        cls._require_role_management_permission(current_user)
+
+        roles = PermissionRepository.get_all_roles_with_permissions(
+            active_roles_only=True
+        )
+
+        for role in roles:
+            role["is_protected"] = (
+                role["role_name"] == cls.SYSTEM_ADMINISTRATOR_ROLE
+            )
+            role["permission_count"] = len(role["permission_ids"])
+
+        return roles
+
+    @classmethod
+    def get_role_permission_editor_data(
+        cls,
+        role_id,
+        current_user: dict,
+    ) -> dict:
+        """Return grouped checkbox data for one role."""
+        cls._require_role_management_permission(current_user)
+
+        if not role_id:
+            raise ValueError("Role ID is required.")
+
+        role = RoleRepository.get_by_id(role_id)
+
+        if not role:
+            raise ValueError("Role was not found.")
+
+        if not role["is_active"]:
+            raise ValueError(
+                "Permissions cannot be managed for an inactive role."
+            )
+
+        permissions = PermissionRepository.get_all_permissions()
+        assigned_permissions = PermissionRepository.get_by_role(role_id)
+
+        assigned_permission_ids = {
+            str(permission["id"])
+            for permission in assigned_permissions
+        }
+
+        grouped_permissions = []
+        grouped_permission_ids = set()
+
+        for group in cls.get_permission_groups():
+            group_permissions = []
+
+            for permission in permissions:
+                permission_name = cls._clean_text(
+                    permission.get("permission_name")
+                ).lower()
+
+                matches_prefix = any(
+                    permission_name.startswith(prefix)
+                    for prefix in group["prefixes"]
+                )
+                excluded = any(
+                    permission_name.startswith(prefix)
+                    for prefix in group["exclude_prefixes"]
+                )
+
+                if not matches_prefix or excluded:
+                    continue
+
+                permission_id = str(permission["id"])
+                grouped_permission_ids.add(permission_id)
+
+                group_permissions.append(
+                    {
+                        **permission,
+                        "assigned": (
+                            permission_id in assigned_permission_ids
+                        ),
+                    }
+                )
+
+            if group_permissions:
+                grouped_permissions.append(
+                    {
+                        "key": group["key"],
+                        "title": group["title"],
+                        "permissions": group_permissions,
+                    }
+                )
+
+        ungrouped_permissions = [
+            {
+                **permission,
+                "assigned": (
+                    str(permission["id"]) in assigned_permission_ids
+                ),
+            }
+            for permission in permissions
+            if str(permission["id"]) not in grouped_permission_ids
+        ]
+
+        if ungrouped_permissions:
+            grouped_permissions.append(
+                {
+                    "key": "other",
+                    "title": "Other",
+                    "permissions": ungrouped_permissions,
+                }
+            )
+
+        is_protected = (
+            role["role_name"] == cls.SYSTEM_ADMINISTRATOR_ROLE
+        )
+
+        return {
+            "role": {
+                **role,
+                "is_protected": is_protected,
+            },
+            "is_protected": is_protected,
+            "permission_count": len(assigned_permission_ids),
+            "total_permission_count": len(permissions),
+            "groups": grouped_permissions,
+        }
+
+    # ============================================================
+    # ROLE PERMISSION MANAGEMENT
+    # ============================================================
+
+    @classmethod
+    def get_role_permission_matrix(
+        cls,
+        role_id,
+    ) -> dict:
+        if not role_id:
+            raise ValueError(
+                "Role ID is required."
+            )
+
+        role = RoleRepository.get_by_id(
+            role_id
+        )
+
+        if not role:
+            raise ValueError(
+                "Role was not found."
+            )
+
+        permissions = (
+            PermissionRepository.get_all()
+        )
+
+        assigned_permissions = (
+            PermissionRepository.get_by_role(
+                role_id
+            )
+        )
+
+        assigned_permission_ids = {
+            str(permission["id"])
+            for permission in assigned_permissions
+        }
+
+        return {
+            "role": role,
+            "permissions": [
+                {
+                    **permission,
+                    "assigned": (
+                        str(permission["id"])
+                        in assigned_permission_ids
+                    ),
+                }
+                for permission in permissions
+            ],
+        }
+
+    @classmethod
+    def update_role_permissions(
+        cls,
+        role_id,
+        permission_ids,
+        current_user: dict,
+    ) -> bool:
+        cls._require_role_management_permission(
+            current_user
+        )
+
+        if not role_id:
+            raise ValueError(
+                "Role ID is required."
+            )
+
+        permission_ids = list(
+            dict.fromkeys(
+                str(permission_id)
+                for permission_id in (
+                    permission_ids or []
+                )
+                if permission_id
+            )
+        )
+
+        conn = get_connection()
+        cur = conn.cursor()
+
+        try:
+            role = RoleRepository.get_by_id(
+                role_id,
+                cursor=cur,
+            )
+
+            if not role:
+                raise ValueError(
+                    "Role was not found."
+                )
+
+            if not role["is_active"]:
+                raise ValueError(
+                    "Permissions cannot be changed "
+                    "for an inactive role."
+                )
+
+            all_permissions = (
+                PermissionRepository.get_all(
+                    cursor=cur
+                )
+            )
+
+            valid_permission_ids = {
+                str(permission["id"])
+                for permission in all_permissions
+            }
+
+            invalid_permission_ids = [
+                permission_id
+                for permission_id in permission_ids
+                if permission_id
+                not in valid_permission_ids
+            ]
+
+            if invalid_permission_ids:
+                raise ValueError(
+                    "One or more selected permissions "
+                    "are invalid."
+                )
+
+            current_permissions = (
+                PermissionRepository.get_by_role(
+                    role_id,
+                    cursor=cur,
+                )
+            )
+
+            current_permission_ids = {
+                str(permission["id"])
+                for permission in current_permissions
+            }
+
+            new_permission_ids = set(
+                permission_ids
+            )
+
+            if (
+                current_permission_ids
+                == new_permission_ids
+            ):
+                raise ValueError(
+                    "No permission changes were detected."
+                )
+
+            if (
+                role["role_name"]
+                == cls.SYSTEM_ADMINISTRATOR_ROLE
+            ):
+                if (
+                    new_permission_ids
+                    != valid_permission_ids
+                ):
+                    raise ValueError(
+                        "System Administrator must retain "
+                        "all registered system permissions."
+                    )
+
+            added_ids = (
+                new_permission_ids
+                - current_permission_ids
+            )
+
+            removed_ids = (
+                current_permission_ids
+                - new_permission_ids
+            )
+
+            permissions_by_id = {
+                str(permission["id"]): permission
+                for permission in all_permissions
+            }
+
+            PermissionRepository.replace_role_permissions(
+                role_id,
+                permission_ids,
+                cursor=cur,
+            )
+
+            change_lines = []
+
+            for permission_id in sorted(
+                added_ids,
+                key=lambda item: (
+                    permissions_by_id[item][
+                        "permission_name"
+                    ]
+                ),
+            ):
+                permission = permissions_by_id[
+                    permission_id
+                ]
+
+                change_lines.append(
+                    (
+                        "Added Permission: "
+                        f"{permission['permission_name']}"
+                    )
+                )
+
+            for permission_id in sorted(
+                removed_ids,
+                key=lambda item: (
+                    permissions_by_id[item][
+                        "permission_name"
+                    ]
+                ),
+            ):
+                permission = permissions_by_id[
+                    permission_id
+                ]
+
+                change_lines.append(
+                    (
+                        "Removed Permission: "
+                        f"{permission['permission_name']}"
+                    )
+                )
+
+            change_details = "\n".join(
+                f"- {change}"
+                for change in change_lines
+            )
+
+            ActivityLogger.log_update(
+                cur,
+                user_id=current_user["id"],
+                module=(
+                    ActivityLogger.MODULE_ADMINISTRATION
+                ),
+                record_id=role_id,
+                details=(
+                    f"Updated permissions for role "
+                    f"{role['role_name']}.\n"
+                    f"Changes:\n"
+                    f"{change_details}"
+                ),
+            )
+
+            conn.commit()
+
+            return True
+
+        except Exception:
+            conn.rollback()
+            raise
+
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def assign_role_permission(
+        cls,
+        role_id,
+        permission_id,
+        current_user: dict,
+    ) -> bool:
+        cls._require_role_management_permission(
+            current_user
+        )
+
+        matrix = cls.get_role_permission_matrix(
+            role_id
+        )
+
+        selected_ids = [
+            str(permission["id"])
+            for permission in matrix["permissions"]
+            if permission["assigned"]
+        ]
+
+        permission_id = str(
+            permission_id
+        )
+
+        if permission_id in selected_ids:
+            raise ValueError(
+                "Permission is already assigned "
+                "to this role."
+            )
+
+        selected_ids.append(
+            permission_id
+        )
+
+        return cls.update_role_permissions(
+            role_id,
+            selected_ids,
+            current_user,
+        )
+
+    @classmethod
+    def remove_role_permission(
+        cls,
+        role_id,
+        permission_id,
+        current_user: dict,
+    ) -> bool:
+        cls._require_role_management_permission(
+            current_user
+        )
+
+        matrix = cls.get_role_permission_matrix(
+            role_id
+        )
+
+        permission_id = str(
+            permission_id
+        )
+
+        current_assigned_ids = {
+            str(permission["id"])
+            for permission in matrix["permissions"]
+            if permission["assigned"]
+        }
+
+        if (
+            permission_id
+            not in current_assigned_ids
+        ):
+            raise ValueError(
+                "Permission is not assigned "
+                "to this role."
+            )
+
+        selected_ids = [
+            str(permission["id"])
+            for permission in matrix["permissions"]
+            if (
+                permission["assigned"]
+                and str(permission["id"])
+                != permission_id
+            )
+        ]
+
+        return cls.update_role_permissions(
+            role_id,
+            selected_ids,
+            current_user,
+        )
+
     # ============================================================
     # EMPLOYEE NUMBER
     # ============================================================
@@ -914,7 +1619,21 @@ class OrganizationService:
             current_user
         ):
             raise PermissionError(
-                "You do not have permission to manage user accounts."
+                "You do not have permission to manage "
+                "user accounts."
+            )
+
+    @classmethod
+    def _require_role_management_permission(
+        cls,
+        current_user: dict,
+    ) -> None:
+        if not PermissionService.can_manage_roles(
+            current_user
+        ):
+            raise PermissionError(
+                "You do not have permission to manage "
+                "roles and permissions."
             )
 
     # ============================================================
@@ -927,7 +1646,7 @@ class OrganizationService:
         role_name: str,
     ) -> str:
         """
-        Translate the new database role names into role text understood
+        Translate new database role names into role text understood
         by the current Version 0.9 permission and login code.
 
         This compatibility layer is temporary and can be removed after

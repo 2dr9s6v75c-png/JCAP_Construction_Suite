@@ -2,16 +2,23 @@ class JCAPTheme:
     """
     JCAP Construction Suite
     Global Theme & UI Standards
+
+    Centralized application color standard.
+
+    Compatibility aliases are temporarily retained while
+    older modules migrate to the centralized theme names.
     """
 
-    # ===========================
-    # Brand Colors
-    # ===========================
+    # ============================================================
+    # BRAND COLORS
+    # ============================================================
 
     PRIMARY_BLUE = "#0D47A1"
     PRIMARY_BLUE_HOVER = "#0A2E63"
 
     ACCENT_BLUE = "#1976D2"
+
+    DARK_BLUE = "#0A2E63"
 
     BACKGROUND = "#F5F7FA"
 
@@ -23,9 +30,18 @@ class JCAPTheme:
 
     BORDER = "#D6DCE5"
 
-    # ===========================
-    # Action Buttons
-    # ===========================
+    # ============================================================
+    # GENERAL SEMANTIC COLORS
+    # ============================================================
+
+    GREEN = "#43A047"
+    RED = "#E53935"
+    ORANGE = "#FB8C00"
+    CYAN = "#00ACC1"
+
+    # ============================================================
+    # ACTION BUTTONS
+    # ============================================================
 
     SAVE = "#43A047"
     SAVE_HOVER = "#2E7D32"
@@ -57,9 +73,9 @@ class JCAPTheme:
     REJECT = "#E53935"
     REJECT_HOVER = "#B71C1C"
 
-    # ===========================
-    # Status Colors
-    # ===========================
+    # ============================================================
+    # STATUS COLORS
+    # ============================================================
 
     STATUS_NEW = "#42A5F5"
 
@@ -73,12 +89,26 @@ class JCAPTheme:
 
     STATUS_CANCELLED = "#E53935"
 
-    # ===========================
-    # Priority Colors
-    # ===========================
+    # ============================================================
+    # PRIORITY COLORS
+    # ============================================================
 
     PRIORITY_HIGH = "#E53935"
 
     PRIORITY_MEDIUM = "#FB8C00"
 
     PRIORITY_LOW = "#43A047"
+
+    # ============================================================
+    # COMPATIBILITY ALIASES
+    # ============================================================
+
+    PRIMARY_BLUE_LIGHT = ACCENT_BLUE
+
+    BG_LIGHT = BACKGROUND
+
+    CARD_BG = CARD
+
+    TEXT_DARK = TEXT
+
+    TEXT_MUTED = TEXT_SECONDARY

@@ -6,9 +6,15 @@ class PermissionRepository(BaseRepository):
     PostgreSQL data-access repository for permissions
     and role-permission assignments.
 
-    Business permission decisions belong to PermissionService.
+    Business permission decisions belong to PermissionService
+    and OrganizationService.
+
     This repository only reads and modifies permission data.
     """
+
+    # ============================================================
+    # PERMISSION READ OPERATIONS
+    # ============================================================
 
     @classmethod
     def get_by_id(
@@ -78,6 +84,23 @@ class PermissionRepository(BaseRepository):
         ]
 
     @classmethod
+    def get_all_permissions(
+        cls,
+        *,
+        cursor=None,
+    ) -> list[dict]:
+        """
+        Explicit matrix-friendly alias for get_all().
+
+        Retained separately so Administration UI code clearly
+        communicates that it is loading the permission registry.
+        """
+
+        return cls.get_all(
+            cursor=cursor
+        )
+
+    @classmethod
     def get_by_role(
         cls,
         role_id,
@@ -104,6 +127,201 @@ class PermissionRepository(BaseRepository):
             cls._map_permission(row)
             for row in rows
         ]
+
+    # ============================================================
+    # MATRIX READ OPERATIONS
+    # ============================================================
+
+    @classmethod
+    def get_permission_matrix(
+        cls,
+        *,
+        cursor=None,
+    ) -> list[dict]:
+        """
+        Return every permission with all active role assignments.
+
+        Result example:
+
+            {
+                "id": "...",
+                "permission_name": "material_requests.create",
+                "description": "Create Material Requests",
+                "role_ids": ["...", "..."],
+            }
+
+        The Administration UI may use this to construct a visual
+        permission matrix without issuing one query per permission.
+        """
+
+        rows = cls.fetch_all(
+            """
+            SELECT
+                p.id,
+                p.permission_name,
+                p.description,
+                r.id,
+                r.role_name
+            FROM core.permissions p
+            LEFT JOIN core.role_permissions rp
+                ON rp.permission_id = p.id
+            LEFT JOIN core.roles r
+                ON r.id = rp.role_id
+            ORDER BY
+                p.permission_name,
+                r.role_name
+            """,
+            cursor=cursor,
+        )
+
+        permissions = {}
+
+        for row in rows:
+            permission_id = str(row[0])
+
+            if permission_id not in permissions:
+                permissions[permission_id] = {
+                    "id": permission_id,
+                    "permission_name": row[1],
+                    "description": row[2] or "",
+                    "role_ids": [],
+                    "roles": [],
+                }
+
+            role_id = row[3]
+            role_name = row[4]
+
+            if role_id:
+                role_id = str(role_id)
+
+                permissions[
+                    permission_id
+                ]["role_ids"].append(
+                    role_id
+                )
+
+                permissions[
+                    permission_id
+                ]["roles"].append(
+                    {
+                        "id": role_id,
+                        "role_name": role_name,
+                    }
+                )
+
+        return list(
+            permissions.values()
+        )
+
+    @classmethod
+    def get_all_roles_with_permissions(
+        cls,
+        *,
+        active_roles_only=True,
+        cursor=None,
+    ) -> list[dict]:
+        """
+        Return roles together with their assigned permissions.
+
+        This is optimized for the role-focused Administration UI.
+
+        Result example:
+
+            {
+                "id": "...",
+                "role_name": "Purchasing Officer",
+                "description": "...",
+                "is_active": True,
+                "permissions": [
+                    {
+                        "id": "...",
+                        "permission_name": "...",
+                        "description": "...",
+                    }
+                ],
+            }
+        """
+
+        query = """
+            SELECT
+                r.id,
+                r.role_name,
+                r.description,
+                r.is_active,
+                p.id,
+                p.permission_name,
+                p.description
+            FROM core.roles r
+            LEFT JOIN core.role_permissions rp
+                ON rp.role_id = r.id
+            LEFT JOIN core.permissions p
+                ON p.id = rp.permission_id
+        """
+
+        params = ()
+
+        if active_roles_only:
+            query += """
+                WHERE r.is_active = TRUE
+            """
+
+        query += """
+            ORDER BY
+                r.role_name,
+                p.permission_name
+        """
+
+        rows = cls.fetch_all(
+            query,
+            params,
+            cursor=cursor,
+        )
+
+        roles = {}
+
+        for row in rows:
+            role_id = str(row[0])
+
+            if role_id not in roles:
+                roles[role_id] = {
+                    "id": role_id,
+                    "role_name": row[1],
+                    "description": row[2] or "",
+                    "is_active": bool(row[3]),
+                    "permissions": [],
+                    "permission_ids": [],
+                }
+
+            permission_id = row[4]
+
+            if permission_id:
+                permission_id = str(
+                    permission_id
+                )
+
+                roles[
+                    role_id
+                ]["permission_ids"].append(
+                    permission_id
+                )
+
+                roles[
+                    role_id
+                ]["permissions"].append(
+                    {
+                        "id": permission_id,
+                        "permission_name": row[5],
+                        "description": row[6] or "",
+                    }
+                )
+
+        return list(
+            roles.values()
+        )
+
+    # ============================================================
+    # EXISTENCE AND PERMISSION CHECKS
+    # ============================================================
 
     @classmethod
     def permission_name_exists(
@@ -192,6 +410,10 @@ class PermissionRepository(BaseRepository):
             cursor=cursor,
         )
 
+    # ============================================================
+    # COUNTS
+    # ============================================================
+
     @classmethod
     def count_permissions(
         cls,
@@ -222,6 +444,10 @@ class PermissionRepository(BaseRepository):
             (role_id,),
             cursor=cursor,
         )
+
+    # ============================================================
+    # PERMISSION REGISTRY WRITE OPERATIONS
+    # ============================================================
 
     @classmethod
     def create(
@@ -275,18 +501,26 @@ class PermissionRepository(BaseRepository):
         for column, value in data.items():
             if column not in allowed_columns:
                 raise ValueError(
-                    f"Permission column is not updateable: {column}"
+                    (
+                        "Permission column is not "
+                        f"updateable: {column}"
+                    )
                 )
 
             updates.append(
                 f"{column} = %s"
             )
-            params.append(value)
+
+            params.append(
+                value
+            )
 
         if not updates:
             return False
 
-        params.append(permission_id)
+        params.append(
+            permission_id
+        )
 
         affected_rows = cls.execute(
             f"""
@@ -300,6 +534,10 @@ class PermissionRepository(BaseRepository):
         )
 
         return affected_rows > 0
+
+    # ============================================================
+    # ROLE PERMISSION ASSIGNMENTS
+    # ============================================================
 
     @classmethod
     def assign_permission(
@@ -368,7 +606,6 @@ class PermissionRepository(BaseRepository):
         """
         Replace all permissions assigned to a role.
 
-        Important:
         For atomic behavior, OrganizationService should call this
         method with a shared transaction cursor.
         """
@@ -390,6 +627,10 @@ class PermissionRepository(BaseRepository):
             )
 
         return True
+
+    # ============================================================
+    # ROW MAPPING
+    # ============================================================
 
     @staticmethod
     def _map_permission(row):
