@@ -2,6 +2,9 @@ import customtkinter as ctk
 
 from config import settings
 
+from core.clarifications.clarification_service import (
+    ClarificationService,
+)
 from core.navigation.navigation_service import NavigationService
 from core.notifications.notification_service import NotificationService
 from core.security.permissions import PermissionService
@@ -16,13 +19,16 @@ from modules.administration.views.create_user_view import (
 from modules.administration.views.edit_user_view import (
     EditUserView,
 )
-from modules.administration.views.user_management_view import (
-    UserManagementView,
-)
 from modules.administration.views.roles_permissions_view import (
     RolesPermissionsView,
 )
+from modules.administration.views.user_management_view import (
+    UserManagementView,
+)
 
+from modules.quotation.views.clarification_details_view import (
+    ClarificationDetailsView,
+)
 from modules.quotation.views.material_request_details_view import (
     MaterialRequestDetailsView,
 )
@@ -481,10 +487,6 @@ class MainWindow(ctk.CTk):
         Open the New Material Request view.
 
         RBAC v1 defense-in-depth guard.
-
-        QuotationView already hides the New Material Request button
-        for unauthorized users. This navigation-level guard prevents
-        accidental or direct access to the creation view.
         """
 
         if not PermissionService.can_create_material_request(
@@ -620,13 +622,56 @@ class MainWindow(ctk.CTk):
             )
             return
 
-        NotificationService.info(
-            (
-                "The Supplier Clarification conversation "
-                "view will be connected in the next step."
-            ),
-            title="Supplier Clarification",
+        clarification = (
+            ClarificationService.get_clarification(
+                clarification_id
+            )
         )
+
+        if not clarification:
+            NotificationService.warning(
+                (
+                    "The selected clarification "
+                    "was not found."
+                ),
+                title="Clarification Unavailable",
+            )
+            return
+
+        material_request_id = clarification.get(
+            "material_request_id"
+        )
+
+        self.set_active_navigation(
+            "quotation"
+        )
+
+        self.navigation.navigate(
+            ClarificationDetailsView,
+            self.user,
+            clarification_id,
+            on_back=lambda: (
+                self.show_existing_material_request(
+                    material_request_id
+                )
+            ),
+            on_status_change=(
+                self.handle_clarification_status_change
+            ),
+        )
+
+    def handle_clarification_status_change(
+        self,
+        clarification_id,
+    ):
+        """
+        ClarificationDetailsView reloads itself after each
+        successful workflow action.
+
+        This callback is reserved for future dashboard counters,
+        notification badges, and live quotation monitoring refresh.
+        """
+        pass
 
     # ============================================================
     # ADMINISTRATION MODULE

@@ -75,3 +75,46 @@
 ### Fixed
 - Fixed authenticated user sessions missing role_id and organization role data.
 - Fixed live RBAC permission changes not reflecting in Material Request UI.
+
+- Added Supplier Clarification backend workflow.
+- Added clarification notifications and workflow status transitions.
+- Added Project Engineer clarification response permissions.
+- Added Supplier Clarifications tab to Material Request Details.
+- Added Record Supplier Clarification UI.
+- Added RBAC-protected clarification navigation.
+- Verified Purchasing Officer to Project Engineer clarification assignment workflow.
+
+## Supplier Clarification Workflow
+
+### Added
+- Supplier clarification recording from Material Request details.
+- Supplier Reference / RFQ Reference persistence.
+- Project Engineer assignment for supplier clarifications.
+- Clarification conversation timeline.
+- Engineering response workflow.
+- Purchasing Officer forwarding workflow.
+- Supplier follow-up clarification loop.
+- Multi-cycle Engineering clarification responses.
+- Clarification resolution workflow.
+- Clarification notifications.
+- Database-driven clarification RBAC permissions.
+- Independent UI permission checks for supplier follow-up and resolution actions.
+
+### Workflow
+Supplier Question
+→ Awaiting Engineering Response
+→ Engineering Response
+→ Response Ready
+→ Forwarded to Supplier
+→ Supplier Follow-up
+→ Awaiting Engineering Response
+→ Additional Engineering Response
+→ Response Ready
+→ Forwarded to Supplier
+→ Resolved
+
+### Security
+- Engineering responses are restricted to the assigned Project Engineer.
+- Clarification actions are protected by service-layer RBAC enforcement.
+- Clarification action buttons are independently controlled by database-driven permissions.
+- Resolved clarifications are fully read-only.
