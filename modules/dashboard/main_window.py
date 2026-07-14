@@ -44,6 +44,12 @@ from modules.quotation.views.quotation_view import (
 from modules.quotation.views.record_supplier_clarification_view import (
     RecordSupplierClarificationView,
 )
+from modules.shared.notification_bell import (
+    NotificationBell,
+)
+from modules.shared.notification_panel import (
+    NotificationPanel,
+)
 
 
 class MainWindow(ctk.CTk):
@@ -54,6 +60,7 @@ class MainWindow(ctk.CTk):
 
         self.sidebar_buttons = {}
         self.active_navigation = None
+        self.notification_panel = None
 
         self.title(
             f"{settings.APP_NAME} v{settings.APP_VERSION}"
@@ -273,6 +280,7 @@ class MainWindow(ctk.CTk):
             ] = button
 
     def set_active_navigation(self, key):
+        self.close_notification_panel()
         self.active_navigation = key
 
         for button_key, button in (
@@ -292,14 +300,44 @@ class MainWindow(ctk.CTk):
     # ============================================================
 
     def build_header(self):
+        self.header.grid_columnconfigure(
+            0,
+            weight=1,
+        )
+
         ctk.CTkLabel(
             self.header,
             text="JCAP CONSTRUCTION SUITE",
             font=("Segoe UI", 24, "bold"),
             text_color=JCAPTheme.DARK_BLUE,
-        ).pack(
-            side="left",
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
             padx=25,
+        )
+
+        right_side = ctk.CTkFrame(
+            self.header,
+            fg_color="transparent",
+        )
+
+        right_side.grid(
+            row=0,
+            column=1,
+            sticky="e",
+            padx=20,
+        )
+
+        self.notification_bell = NotificationBell(
+            right_side,
+            self.user,
+            on_click=self.show_notifications,
+        )
+
+        self.notification_bell.pack(
+            side="left",
+            padx=(0, 20),
         )
 
         display_role = (
@@ -309,7 +347,7 @@ class MainWindow(ctk.CTk):
         )
 
         ctk.CTkLabel(
-            self.header,
+            right_side,
             text=(
                 f"{self.user.get('full_name', '')}"
                 f"  |  {display_role}"
@@ -317,8 +355,7 @@ class MainWindow(ctk.CTk):
             font=("Segoe UI", 13),
             text_color=JCAPTheme.TEXT_MUTED,
         ).pack(
-            side="right",
-            padx=25,
+            side="left",
         )
 
     # ============================================================
@@ -674,6 +711,99 @@ class MainWindow(ctk.CTk):
         pass
 
     # ============================================================
+    # NOTIFICATIONS
+    # ============================================================
+
+    def show_notifications(self):
+        """
+        Toggle the Notification Center panel.
+        """
+        if (
+            self.notification_panel is not None
+            and self.notification_panel.winfo_exists()
+        ):
+            self.close_notification_panel()
+            return
+
+        self.open_notification_panel()
+
+    def open_notification_panel(self):
+        """
+        Open the read-only Notification Center below the header.
+        """
+        self.close_notification_panel()
+
+        self.notification_panel = NotificationPanel(
+            self,
+            self.user,
+            on_close=self.close_notification_panel,
+            on_notification_selected=(
+                self.handle_notification_selected
+            ),
+            limit=50,
+        )
+
+        self.notification_panel.place(
+            relx=1.0,
+            y=74,
+            anchor="ne",
+            x=-18,
+        )
+
+        self.notification_panel.lift()
+
+    def close_notification_panel(self):
+        """
+        Close and release the current Notification Center panel.
+        """
+        panel = getattr(
+            self,
+            "notification_panel",
+            None,
+        )
+
+        if panel is None:
+            return
+
+        try:
+            if panel.winfo_exists():
+                panel.destroy()
+        except Exception:
+            pass
+
+        self.notification_panel = None
+
+    def handle_notification_selected(
+        self,
+        notification,
+    ):
+        """
+        Placeholder for click-to-open navigation.
+
+        Read status and entity navigation will be implemented
+        in the next notification milestone.
+        """
+        title = (
+            notification.get("title")
+            or "Notification"
+        )
+
+        entity_type = (
+            notification.get("entity_type")
+            or "Not specified"
+        )
+
+        NotificationService.info(
+            (
+                f"{title}\n\n"
+                f"Entity type: {entity_type}\n\n"
+                "Click-to-open navigation will be enabled "
+                "in the next milestone."
+            ),
+            title="Notification",
+        )
+
+    # ============================================================
     # ADMINISTRATION MODULE
     # ============================================================
 
@@ -914,6 +1044,7 @@ class MainWindow(ctk.CTk):
     # ============================================================
 
     def logout(self):
+        self.close_notification_panel()
         self.destroy()
 
         from modules.authentication.login_window import (
