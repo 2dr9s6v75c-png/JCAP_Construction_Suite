@@ -118,3 +118,26 @@ Supplier Question
 - Clarification actions are protected by service-layer RBAC enforcement.
 - Clarification action buttons are independently controlled by database-driven permissions.
 - Resolved clarifications are fully read-only.
+
+## Notification Center
+
+### Added
+- Notification Bell with live unread badge.
+- Notification Center panel.
+- Refresh notifications.
+- Close panel.
+- Read/Unread notification display.
+- Click notification to open related record.
+- Automatic mark-as-read.
+- Automatic unread badge refresh.
+- Central notification routing for application entities.
+
+### Supported Navigation
+- Supplier Clarifications
+- Material Requests
+
+### Architecture
+- Reusable Notification Bell component.
+- Reusable Notification Panel component.
+- Central notification routing.
+- Database-driven notification loading.

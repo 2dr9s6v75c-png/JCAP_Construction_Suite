@@ -6,6 +6,9 @@ from core.clarifications.clarification_service import (
     ClarificationService,
 )
 from core.navigation.navigation_service import NavigationService
+from core.notifications.notification_constants import (
+    NotificationEntity,
+)
 from core.notifications.notification_service import NotificationService
 from core.security.permissions import PermissionService
 from core.theme import JCAPTheme
@@ -702,13 +705,15 @@ class MainWindow(ctk.CTk):
         clarification_id,
     ):
         """
-        ClarificationDetailsView reloads itself after each
-        successful workflow action.
-
-        This callback is reserved for future dashboard counters,
-        notification badges, and live quotation monitoring refresh.
+        Refresh notification state after a clarification
+        workflow action completes.
         """
-        pass
+        if getattr(
+            self,
+            "notification_bell",
+            None,
+        ):
+            self.notification_bell.refresh()
 
     # ============================================================
     # NOTIFICATIONS
@@ -778,29 +783,105 @@ class MainWindow(ctk.CTk):
         notification,
     ):
         """
-        Placeholder for click-to-open navigation.
-
-        Read status and entity navigation will be implemented
-        in the next notification milestone.
+        Mark the selected notification as read and open
+        its related application record.
         """
-        title = (
-            notification.get("title")
-            or "Notification"
+        if not notification:
+            return
+
+        notification_id = notification.get(
+            "id"
         )
 
-        entity_type = (
-            notification.get("entity_type")
-            or "Not specified"
+        entity_type = str(
+            notification.get(
+                "entity_type"
+            )
+            or ""
+        ).strip().lower()
+
+        entity_id = notification.get(
+            "entity_id"
         )
+
+        try:
+            if (
+                notification_id
+                and not notification.get(
+                    "is_read",
+                    False,
+                )
+            ):
+                NotificationService.mark_as_read(
+                    notification_id,
+                    self.user,
+                )
+
+            if getattr(
+                self,
+                "notification_bell",
+                None,
+            ):
+                self.notification_bell.refresh()
+
+            self.close_notification_panel()
+
+            self.route_notification(
+                entity_type,
+                entity_id,
+            )
+
+        except Exception as error:
+            NotificationService.error(
+                "Unable to open the selected notification.",
+                title="Notification Failed",
+                error=error,
+            )
+
+            if getattr(
+                self,
+                "notification_bell",
+                None,
+            ):
+                self.notification_bell.refresh()
+
+    def route_notification(
+        self,
+        entity_type,
+        entity_id,
+    ):
+        """
+        Route a notification to its related application record.
+        """
+        if not entity_type or not entity_id:
+            NotificationService.warning(
+                (
+                    "This notification is not linked "
+                    "to an application record."
+                ),
+                title="Notification Unavailable",
+            )
+            return
+
+        if entity_type == NotificationEntity.CLARIFICATION:
+            self.show_clarification_details(
+                entity_id
+            )
+            return
+
+        if entity_type == NotificationEntity.MATERIAL_REQUEST:
+            self.show_existing_material_request(
+                entity_id
+            )
+            return
 
         NotificationService.info(
             (
-                f"{title}\n\n"
-                f"Entity type: {entity_type}\n\n"
-                "Click-to-open navigation will be enabled "
-                "in the next milestone."
+                "This notification type is not yet connected "
+                "to a destination screen.\n\n"
+                f"Entity type: {entity_type}"
             ),
-            title="Notification",
+            title="Navigation Coming Soon",
         )
 
     # ============================================================
