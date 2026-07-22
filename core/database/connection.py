@@ -1,5 +1,10 @@
 import psycopg2
+import psycopg2.extras
+
 from config import settings
+
+# Register UUID support once when this module is imported.
+psycopg2.extras.register_uuid()
 
 
 def get_connection():
@@ -8,7 +13,7 @@ def get_connection():
         port=settings.DB_PORT,
         dbname=settings.DB_NAME,
         user=settings.DB_USER,
-        password=settings.DB_PASSWORD
+        password=settings.DB_PASSWORD,
     )
 
 

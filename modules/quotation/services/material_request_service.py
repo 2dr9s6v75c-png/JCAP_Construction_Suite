@@ -190,7 +190,9 @@ def get_material_requests(status_filter="Active"):
                 "project_name": row[3],
                 "description": row[4],
                 "requested_by": row[5],
-                "assigned_to": row[6],
+                "assigned_to": (
+                    str(row[6]) if row[6] else None
+                ),
                 "priority": row[7],
                 "status": row[8],
                 "due_date": row[9],
@@ -227,17 +229,22 @@ def get_material_request(material_request_id: str):
                 mr.material_request_description,
                 mr.requested_by,
                 mr.assigned_to,
+                assigned_user.full_name,
+                assigned_user.username,
                 mr.priority,
                 mr.status,
                 mr.due_date,
                 mr.remarks,
                 mr.folder_name,
-                mr.created_at
+                mr.created_at,
+                mr.current_assignment_id
             FROM quotation.material_requests mr
             JOIN core.projects p
                 ON mr.project_id = p.id
             LEFT JOIN core.clients c
                 ON p.client_id = c.id
+            LEFT JOIN core.users assigned_user
+                ON mr.assigned_to = assigned_user.id::text
             WHERE mr.id = %s
             """,
             (material_request_id,),
@@ -266,23 +273,42 @@ def get_material_request(material_request_id: str):
 
         attachments = cur.fetchall()
 
+        assigned_to_id = row[9]
+
         return {
             "id": str(row[0]),
             "mr_number": row[1],
             "project_id": str(row[2]),
             "project_code": row[3] or "",
-            "project_name": row[4],
+            "project_name": row[4] or "",
             "client_name": row[5] or "",
             "location": row[6] or "",
-            "material_request_description": row[7],
-            "requested_by": row[8],
-            "assigned_to": row[9],
-            "priority": row[10],
-            "status": row[11],
-            "due_date": row[12],
-            "remarks": row[13] or "",
-            "folder_name": row[14],
-            "created_at": row[15],
+            "material_request_description": row[7] or "",
+            "requested_by": row[8] or "",
+            "assigned_to": (
+                str(assigned_to_id)
+                if assigned_to_id
+                else None
+            ),
+            "assigned_to_id": (
+                str(assigned_to_id)
+                if assigned_to_id
+                else None
+            ),
+            "assigned_to_name": row[10] or "",
+            "assigned_to_username": row[11] or "",
+            "priority": row[12] or "",
+            "status": row[13] or "",
+            "due_date": row[14],
+            "remarks": row[15] or "",
+            "folder_name": row[16] or "",
+            "created_at": row[17],
+            "current_assignment_id": (
+                str(row[18]) if row[18] else None
+            ),
+            "assignment_id": (
+                str(row[18]) if row[18] else None
+            ),
             "attachments": [
                 {
                     "original_filename": attachment[0],
@@ -564,7 +590,6 @@ def get_material_request_lock_status(material_request_id: str):
 
         now = datetime.now()
 
-        # Treat expired locks as available.
         if (
             locked_by
             and lock_expires_at

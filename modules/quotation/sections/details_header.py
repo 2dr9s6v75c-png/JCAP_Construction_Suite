@@ -10,6 +10,7 @@ class DetailsHeader(ctk.CTkFrame):
         title,
         subtitle="Material Request",
         on_open_folder=None,
+        on_assign=None,
         on_archive=None,
         on_restore=None,
         on_edit=None,
@@ -25,11 +26,13 @@ class DetailsHeader(ctk.CTkFrame):
         self.subtitle = subtitle
 
         self.on_open_folder = on_open_folder
+        self.on_assign = on_assign
         self.on_archive = on_archive
         self.on_restore = on_restore
         self.on_edit = on_edit
         self.on_back = on_back
 
+        self.assignment_button = None
         self.edit_button = None
         self.archive_button = None
         self.restore_button = None
@@ -86,6 +89,19 @@ class DetailsHeader(ctk.CTkFrame):
             command=self.on_open_folder,
         ).pack(side="left", padx=5)
 
+        self.assignment_button = ctk.CTkButton(
+            button_frame,
+            text="Assign",
+            width=110,
+            fg_color="#00ACC1",
+            hover_color="#00838F",
+            command=self.on_assign,
+        )
+        self.assignment_button.pack(
+            side="left",
+            padx=5,
+        )
+
         self.archive_button = ctk.CTkButton(
             button_frame,
             text="Archive",
@@ -94,7 +110,10 @@ class DetailsHeader(ctk.CTkFrame):
             hover_color="#EF6C00",
             command=self.on_archive,
         )
-        self.archive_button.pack(side="left", padx=5)
+        self.archive_button.pack(
+            side="left",
+            padx=5,
+        )
 
         self.restore_button = ctk.CTkButton(
             button_frame,
@@ -113,7 +132,10 @@ class DetailsHeader(ctk.CTkFrame):
             hover_color="#0A2E63",
             command=self.on_edit,
         )
-        self.edit_button.pack(side="left", padx=5)
+        self.edit_button.pack(
+            side="left",
+            padx=5,
+        )
 
         ctk.CTkButton(
             button_frame,
@@ -122,7 +144,63 @@ class DetailsHeader(ctk.CTkFrame):
             fg_color=JCAPTheme.BACK,
             hover_color=JCAPTheme.BACK_HOVER,
             command=self.on_back,
-        ).pack(side="left", padx=5)
+        ).pack(
+            side="left",
+            padx=5,
+        )
+
+    # ============================================================
+    # ASSIGNMENT ACTION STATE
+    # ============================================================
+
+    def set_assignment_state(self, assigned=False):
+        """
+        Update the assignment action for the current record.
+
+        Args:
+            assigned:
+                False -> button displays Assign.
+                True -> button displays Reassign.
+        """
+        if not self.assignment_button:
+            return
+
+        if assigned:
+            self.assignment_button.configure(
+                text="Reassign",
+                fg_color="#8E24AA",
+                hover_color="#6A1B9A",
+            )
+        else:
+            self.assignment_button.configure(
+                text="Assign",
+                fg_color="#00ACC1",
+                hover_color="#00838F",
+            )
+
+    def set_assignment_enabled(self, enabled=True):
+        if self.assignment_button:
+            self.assignment_button.configure(
+                state="normal" if enabled else "disabled"
+            )
+
+    def set_assignment_visible(self, visible=True):
+        if not self.assignment_button:
+            return
+
+        if visible:
+            if not self.assignment_button.winfo_manager():
+                self.assignment_button.pack(
+                    side="left",
+                    padx=5,
+                    before=self.archive_button,
+                )
+        elif self.assignment_button.winfo_manager():
+            self.assignment_button.pack_forget()
+
+    # ============================================================
+    # EXISTING HEADER ACTION STATE
+    # ============================================================
 
     def set_edit_enabled(self, enabled=True):
         if self.edit_button:
@@ -138,14 +216,16 @@ class DetailsHeader(ctk.CTkFrame):
 
     def set_record_state(self, state):
         """
-        active
-        archived
+        Supported values:
+            active
+            archived
         """
-
         if state == "archived":
-
             if self.archive_button.winfo_manager():
                 self.archive_button.pack_forget()
+
+            if self.assignment_button.winfo_manager():
+                self.assignment_button.pack_forget()
 
             if not self.restore_button.winfo_manager():
                 self.restore_button.pack(
@@ -154,12 +234,20 @@ class DetailsHeader(ctk.CTkFrame):
                     before=self.edit_button,
                 )
 
-            self.edit_button.configure(state="disabled")
+            self.edit_button.configure(
+                state="disabled"
+            )
 
         else:
-
             if self.restore_button.winfo_manager():
                 self.restore_button.pack_forget()
+
+            if not self.assignment_button.winfo_manager():
+                self.assignment_button.pack(
+                    side="left",
+                    padx=5,
+                    before=self.archive_button,
+                )
 
             if not self.archive_button.winfo_manager():
                 self.archive_button.pack(
@@ -168,4 +256,6 @@ class DetailsHeader(ctk.CTkFrame):
                     before=self.edit_button,
                 )
 
-            self.edit_button.configure(state="normal")
+            self.edit_button.configure(
+                state="normal"
+            )

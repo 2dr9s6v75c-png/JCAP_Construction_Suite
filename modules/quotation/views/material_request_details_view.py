@@ -10,8 +10,12 @@ from core.lifecycle.document_lifecycle import DocumentLifecycle
 from core.notifications.notification_service import NotificationService
 from core.security.permissions import PermissionService
 
+from modules.quotation.components.assignment_dialog import AssignmentDialog
 from modules.quotation.components.collaboration_banner import (
     CollaborationBanner,
+)
+from modules.quotation.processes.material_request_assignment_process import (
+    MaterialRequestAssignmentProcess,
 )
 from modules.quotation.sections.activity_tab import ActivityTab
 from modules.quotation.sections.attachments_tab import AttachmentsTab
@@ -73,6 +77,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
         )
 
+        self.assignment_process = (
+            MaterialRequestAssignmentProcess()
+        )
+
         self.header = None
         self.summary = None
         self.collaboration_banner = None
@@ -115,6 +123,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             title=title,
             subtitle="Material Request",
             on_open_folder=self.open_folder,
+            on_assign=self.open_assignment_dialog,
             on_archive=self.archive_request,
             on_restore=self.restore_request,
             on_edit=self.edit_request,
@@ -136,6 +145,25 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 "archived"
                 if is_archived
                 else "active"
+            )
+        )
+
+        is_assigned = bool(
+            self.request
+            and self.request.get("assigned_to")
+        )
+
+        self.header.set_assignment_state(
+            assigned=is_assigned
+        )
+
+        self.header.set_assignment_enabled(
+            enabled=(
+                not is_archived
+                and PermissionService
+                .can_assign_material_request(
+                    self.user
+                )
             )
         )
 
@@ -277,6 +305,16 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         fields = []
 
         if self.request:
+            assigned_to_name = (
+                self.request.get(
+                    "assigned_to_name"
+                )
+                or self.request.get(
+                    "assigned_to_full_name"
+                )
+                or "Unassigned"
+            )
+
             fields = [
                 {
                     "label": "MR Number",
@@ -312,10 +350,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 },
                 {
                     "label": "Assigned To",
-                    "value": self.request.get(
-                        "assigned_to",
-                        "",
-                    ),
+                    "value": assigned_to_name,
                 },
                 {
                     "label": "Description",
@@ -358,6 +393,8 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             row=0,
             column=0,
             sticky="nsew",
+            padx=0,
+            pady=0,
         )
 
         parent.grid_columnconfigure(
@@ -539,6 +576,140 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             self.on_open_clarification(
                 clarification_id
             )
+
+    # ============================================================
+    # ASSIGNMENT ACTIONS
+    # ============================================================
+
+    def open_assignment_dialog(self):
+        if not self.request:
+            return
+
+        if self.is_archived():
+            NotificationService.warning(
+                (
+                    "Archived Material Requests cannot be "
+                    "assigned or reassigned."
+                ),
+                title="Assignment Unavailable",
+            )
+            return
+
+        if not PermissionService.can_assign_material_request(
+            self.user
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to assign "
+                    "Material Requests."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        is_assigned = bool(
+            self.request.get("assigned_to")
+        )
+
+        AssignmentDialog(
+            self,
+            mode=(
+                AssignmentDialog.MODE_REASSIGN
+                if is_assigned
+                else AssignmentDialog.MODE_ASSIGN
+            ),
+            current_assignee_id=(
+                self.request.get("assigned_to_id")
+                or self.request.get("assigned_to")
+            ),
+            on_submit=self.submit_assignment,
+        )
+
+    def submit_assignment(self, payload):
+        if not self.request:
+            raise ValueError(
+                "Material Request is unavailable."
+            )
+
+        assigned_to = payload.get("assigned_to")
+        assigned_to_name = payload.get(
+            "assigned_to_name",
+            "",
+        )
+        remarks = payload.get("remarks")
+
+        current_assignment_id = (
+            self.request.get(
+                "current_assignment_id"
+            )
+            or self.request.get(
+                "assignment_id"
+            )
+        )
+
+        if current_assignment_id:
+            self.assignment_process.reassign(
+                assignment_id=current_assignment_id,
+                assigned_to=assigned_to,
+                current_user=self.user,
+                remarks=(
+                    "Reassigned through Material Request "
+                    "Details View."
+                ),
+                replacement_remarks=remarks,
+            )
+
+            action_text = "reassigned"
+
+        else:
+            self.assignment_process.assign(
+                material_request_id=(
+                    self.request.get("id")
+                    or self.material_request_id
+                ),
+                assigned_to=assigned_to,
+                current_user=self.user,
+                remarks=remarks,
+            )
+
+            action_text = "assigned"
+
+        self.reload_view_data()
+
+        NotificationService.success(
+            (
+                f"Material Request "
+                f"{self.request.get('mr_number', '')} was "
+                f"{action_text} to {assigned_to_name}."
+            ),
+            title="Assignment Complete",
+        )
+
+    def reload_view_data(self):
+        self.request = get_material_request(
+            self.material_request_id
+        )
+
+        self.activities = get_material_request_activity(
+            self.material_request_id
+        )
+
+        self.clarifications = (
+            ClarificationService
+            .get_material_request_clarifications(
+                self.material_request_id
+            )
+        )
+
+        for widget in self.winfo_children():
+            widget.destroy()
+
+        self.header = None
+        self.summary = None
+        self.collaboration_banner = None
+        self.tabview = None
+
+        self.build_ui()
 
     # ============================================================
     # DOCUMENT ACTIONS
