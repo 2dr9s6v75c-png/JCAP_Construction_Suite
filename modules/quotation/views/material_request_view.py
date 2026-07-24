@@ -4,7 +4,8 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
-from core.master_data.project_service import get_active_projects
+from modules.master_data.projects.project_service import ProjectService
+from modules.master_data.sites.site_service import SiteService
 from modules.quotation.components.request_toolbar import RequestToolbar
 from modules.quotation.services.material_request_service import (
     create_material_request,
@@ -12,14 +13,12 @@ from modules.quotation.services.material_request_service import (
 
 
 class MaterialRequestView(ctk.CTkFrame):
-    """
-    Create a new unassigned Material Request.
+    """Create a new unassigned Phase 1 Material Request."""
 
-    Phase 1 workflow:
-        1. User creates the Material Request.
-        2. The request is saved with workflow state New.
-        3. A manager assigns it later from the Details View.
-    """
+    PROJECT_PLACEHOLDER = "Select an active project"
+    SITE_PLACEHOLDER = "Select an active site"
+    NO_PROJECTS_MESSAGE = "No active projects available"
+    NO_SITES_MESSAGE = "No active sites available"
 
     def __init__(self, parent, user, on_back=None):
         super().__init__(
@@ -32,14 +31,40 @@ class MaterialRequestView(ctk.CTkFrame):
         self.on_back = on_back
         self.attachments = []
 
-        self.projects = get_active_projects()
+        self.projects = []
+        self.sites = []
+        self.project_lookup = {}
+        self.site_lookup = {}
+
+        self._load_projects()
+        self.build_ui()
+
+    # ============================================================
+    # DATA LOADING
+    # ============================================================
+
+    def _load_projects(self):
+        self.projects = ProjectService.get_active(
+            current_user=self.user,
+        )
 
         self.project_lookup = {
-            project["project_name"]: project
+            self._project_display(project): project
             for project in self.projects
+            if project.get("id")
         }
 
-        self.build_ui()
+    @staticmethod
+    def _project_display(project):
+        code = str(project.get("project_code") or "").strip()
+        name = str(project.get("project_name") or "").strip()
+        return f"{code} | {name}" if code else name
+
+    @staticmethod
+    def _site_display(site):
+        code = str(site.get("site_code") or "").strip()
+        name = str(site.get("site_name") or "").strip()
+        return f"{code} | {name}" if code else name
 
     # ============================================================
     # UI CONSTRUCTION
@@ -62,7 +87,6 @@ class MaterialRequestView(ctk.CTkFrame):
             on_back=self.on_back,
             on_open_folder=self.open_folder_placeholder,
         )
-
         self.toolbar.grid(
             row=0,
             column=0,
@@ -101,18 +125,10 @@ class MaterialRequestView(ctk.CTkFrame):
         )
 
         self.request_no_entry = self.add_readonly_field(
-            section,
-            "MR No.",
-            "Auto-generated",
-            1,
-            0,
+            section, "MR No.", "Auto-generated", 1, 0
         )
         self.date_requested_entry = self.add_readonly_field(
-            section,
-            "Date Requested",
-            str(date.today()),
-            1,
-            1,
+            section, "Date Requested", str(date.today()), 1, 1
         )
         self.requested_by_entry = self.add_readonly_field(
             section,
@@ -122,47 +138,35 @@ class MaterialRequestView(ctk.CTkFrame):
             2,
         )
         self.status_entry = self.add_readonly_field(
-            section,
-            "Workflow Status",
-            "New",
-            1,
-            3,
+            section, "Workflow Status", "New", 1, 3
         )
 
-        project_names = (
+        project_values = (
             list(self.project_lookup.keys())
-            or ["No active projects"]
+            or [self.NO_PROJECTS_MESSAGE]
         )
-
         self.project_option = self.add_option(
             section,
-            "Project / Site",
-            project_names,
+            "Project",
+            project_values,
             3,
             0,
             command=self.on_project_selected,
         )
 
-        self.client_entry = self.add_readonly_field(
+        self.site_option = self.add_option(
             section,
-            "Client",
-            "",
+            "Site",
+            [self.SITE_PLACEHOLDER],
             3,
             1,
         )
-        self.location_entry = self.add_readonly_field(
-            section,
-            "Location",
-            "",
-            3,
-            2,
+
+        self.client_entry = self.add_readonly_field(
+            section, "Client", "", 3, 2
         )
         self.assignment_entry = self.add_readonly_field(
-            section,
-            "Assignment",
-            "Unassigned",
-            3,
-            3,
+            section, "Assignment", "Unassigned", 3, 3
         )
 
         self.material_description_entry = self.add_field(
@@ -199,7 +203,9 @@ class MaterialRequestView(ctk.CTkFrame):
         )
 
         if self.projects:
-            self.on_project_selected(project_names[0])
+            first_project = project_values[0]
+            self.project_option.set(first_project)
+            self.on_project_selected(first_project)
 
     def build_attachments_section(self):
         section = ctk.CTkFrame(
@@ -217,10 +223,7 @@ class MaterialRequestView(ctk.CTkFrame):
         section.grid_columnconfigure(0, weight=1)
         section.grid_rowconfigure(1, weight=1)
 
-        header = ctk.CTkFrame(
-            section,
-            fg_color="transparent",
-        )
+        header = ctk.CTkFrame(section, fg_color="transparent")
         header.grid(
             row=0,
             column=0,
@@ -270,6 +273,53 @@ class MaterialRequestView(ctk.CTkFrame):
         self.refresh_attachment_list()
 
     # ============================================================
+    # PROJECT / SITE SELECTION
+    # ============================================================
+
+    def on_project_selected(self, project_display):
+        project = self.project_lookup.get(project_display)
+
+        self.sites = []
+        self.site_lookup = {}
+        self.site_option.configure(values=[self.SITE_PLACEHOLDER])
+        self.site_option.set(self.SITE_PLACEHOLDER)
+        self.set_readonly_value(self.client_entry, "")
+
+        if not project:
+            return
+
+        self.set_readonly_value(
+            self.client_entry,
+            project.get("client_name", ""),
+        )
+
+        try:
+            self.sites = SiteService.get_by_project(
+                project.get("id"),
+                status_filter="Active",
+                current_user=self.user,
+            )
+        except Exception as error:
+            messagebox.showerror(
+                "Unable to Load Sites",
+                f"Sites for the selected project could not be loaded.\n\n{error}",
+            )
+            return
+
+        self.site_lookup = {
+            self._site_display(site): site
+            for site in self.sites
+            if site.get("id")
+        }
+
+        site_values = (
+            list(self.site_lookup.keys())
+            or [self.NO_SITES_MESSAGE]
+        )
+        self.site_option.configure(values=site_values)
+        self.site_option.set(site_values[0])
+
+    # ============================================================
     # ATTACHMENTS
     # ============================================================
 
@@ -279,13 +329,8 @@ class MaterialRequestView(ctk.CTkFrame):
             filetypes=[
                 (
                     "Supported Files",
-                    "*.pdf *.png *.jpg *.jpeg "
-                    "*.xlsx *.xls *.docx *.doc",
+                    "*.pdf *.png *.jpg *.jpeg *.xlsx *.xls *.docx *.doc",
                 ),
-                ("PDF Files", "*.pdf"),
-                ("Image Files", "*.png *.jpg *.jpeg"),
-                ("Excel Files", "*.xlsx *.xls"),
-                ("Word Files", "*.docx *.doc"),
                 ("All Files", "*.*"),
             ],
         )
@@ -305,8 +350,7 @@ class MaterialRequestView(ctk.CTkFrame):
                 self.attachments_frame,
                 text=(
                     "No files attached yet. Click '+ Upload File' "
-                    "to attach PDFs, screenshots, BOQ files, or "
-                    "material lists."
+                    "to attach Material Request files."
                 ),
                 font=("Segoe UI", 14),
                 text_color="#607D8B",
@@ -319,17 +363,11 @@ class MaterialRequestView(ctk.CTkFrame):
                 fg_color="#FFFFFF",
                 corner_radius=10,
             )
-            row.pack(
-                fill="x",
-                padx=10,
-                pady=6,
-            )
-
-            file_name = os.path.basename(file_path)
+            row.pack(fill="x", padx=10, pady=6)
 
             ctk.CTkLabel(
                 row,
-                text=file_name,
+                text=os.path.basename(file_path),
                 font=("Segoe UI", 13),
                 text_color="#111827",
                 anchor="w",
@@ -347,65 +385,26 @@ class MaterialRequestView(ctk.CTkFrame):
                 width=90,
                 fg_color="#E53935",
                 hover_color="#B71C1C",
-                command=lambda p=file_path: (
-                    self.remove_attachment(p)
-                ),
-            ).pack(
-                side="right",
-                padx=10,
-                pady=8,
-            )
+                command=lambda path=file_path: self.remove_attachment(path),
+            ).pack(side="right", padx=10, pady=8)
 
     def remove_attachment(self, file_path):
         if file_path in self.attachments:
             self.attachments.remove(file_path)
-
         self.refresh_attachment_list()
 
     def open_folder_placeholder(self):
         messagebox.showinfo(
             "Folder Unavailable",
-            (
-                "The Material Request folder becomes available "
-                "after the request is saved."
-            ),
-        )
-
-    # ============================================================
-    # PROJECT SELECTION
-    # ============================================================
-
-    def on_project_selected(self, project_name):
-        project = self.project_lookup.get(project_name)
-
-        if not project:
-            return
-
-        self.set_readonly_value(
-            self.client_entry,
-            project["client_name"],
-        )
-        self.set_readonly_value(
-            self.location_entry,
-            project["location"],
+            "The Material Request folder becomes available after the request is saved.",
         )
 
     # ============================================================
     # FIELD HELPERS
     # ============================================================
 
-    def add_field(
-        self,
-        parent,
-        label,
-        row,
-        column,
-        columnspan=1,
-    ):
-        wrapper = ctk.CTkFrame(
-            parent,
-            fg_color="transparent",
-        )
+    def add_field(self, parent, label, row, column, columnspan=1):
+        wrapper = ctk.CTkFrame(parent, fg_color="transparent")
         wrapper.grid(
             row=row,
             column=column,
@@ -421,23 +420,10 @@ class MaterialRequestView(ctk.CTkFrame):
             text=label,
             font=("Segoe UI", 12, "bold"),
             text_color="#111827",
-        ).grid(
-            row=0,
-            column=0,
-            sticky="w",
-        )
+        ).grid(row=0, column=0, sticky="w")
 
-        entry = ctk.CTkEntry(
-            wrapper,
-            height=36,
-        )
-        entry.grid(
-            row=1,
-            column=0,
-            sticky="ew",
-            pady=(4, 0),
-        )
-
+        entry = ctk.CTkEntry(wrapper, height=36)
+        entry.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         return entry
 
     def add_textbox(
@@ -449,10 +435,7 @@ class MaterialRequestView(ctk.CTkFrame):
         columnspan=1,
         height=70,
     ):
-        wrapper = ctk.CTkFrame(
-            parent,
-            fg_color="transparent",
-        )
+        wrapper = ctk.CTkFrame(parent, fg_color="transparent")
         wrapper.grid(
             row=row,
             column=column,
@@ -468,23 +451,10 @@ class MaterialRequestView(ctk.CTkFrame):
             text=label,
             font=("Segoe UI", 12, "bold"),
             text_color="#111827",
-        ).grid(
-            row=0,
-            column=0,
-            sticky="w",
-        )
+        ).grid(row=0, column=0, sticky="w")
 
-        textbox = ctk.CTkTextbox(
-            wrapper,
-            height=height,
-        )
-        textbox.grid(
-            row=1,
-            column=0,
-            sticky="ew",
-            pady=(4, 0),
-        )
-
+        textbox = ctk.CTkTextbox(wrapper, height=height)
+        textbox.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         return textbox
 
     def add_readonly_field(
@@ -522,10 +492,7 @@ class MaterialRequestView(ctk.CTkFrame):
         column,
         command=None,
     ):
-        wrapper = ctk.CTkFrame(
-            parent,
-            fg_color="transparent",
-        )
+        wrapper = ctk.CTkFrame(parent, fg_color="transparent")
         wrapper.grid(
             row=row,
             column=column,
@@ -540,11 +507,7 @@ class MaterialRequestView(ctk.CTkFrame):
             text=label,
             font=("Segoe UI", 12, "bold"),
             text_color="#111827",
-        ).grid(
-            row=0,
-            column=0,
-            sticky="w",
-        )
+        ).grid(row=0, column=0, sticky="w")
 
         option = ctk.CTkOptionMenu(
             wrapper,
@@ -552,14 +515,8 @@ class MaterialRequestView(ctk.CTkFrame):
             height=36,
             command=command,
         )
-        option.grid(
-            row=1,
-            column=0,
-            sticky="ew",
-            pady=(4, 0),
-        )
+        option.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         option.set(values[0])
-
         return option
 
     # ============================================================
@@ -570,40 +527,33 @@ class MaterialRequestView(ctk.CTkFrame):
         errors = []
         first_invalid = None
 
-        selected_project = self.project_option.get()
-        material_description = (
-            self.material_description_entry
-            .get()
-            .strip()
-        )
+        project = self.project_lookup.get(self.project_option.get())
+        site = self.site_lookup.get(self.site_option.get())
+        description = self.material_description_entry.get().strip()
         due_date = self.due_date_entry.get().strip()
-        priority = self.priority_option.get()
 
-        if selected_project == "No active projects":
-            errors.append("Project / Site is required.")
+        if not project:
+            errors.append("Project is required.")
 
-        if not material_description:
-            errors.append(
-                "Material Request Description is required."
-            )
+        if not site:
+            errors.append("An active Site belonging to the Project is required.")
+
+        if not description:
+            errors.append("Material Request Description is required.")
             first_invalid = self.material_description_entry
 
-        if not priority:
+        if not self.priority_option.get():
             errors.append("Priority is required.")
 
         if not due_date:
             errors.append("Due Date is required.")
-            if first_invalid is None:
-                first_invalid = self.due_date_entry
+            first_invalid = first_invalid or self.due_date_entry
         else:
             try:
                 date.fromisoformat(due_date)
             except ValueError:
-                errors.append(
-                    "Due Date must use YYYY-MM-DD format."
-                )
-                if first_invalid is None:
-                    first_invalid = self.due_date_entry
+                errors.append("Due Date must use YYYY-MM-DD format.")
+                first_invalid = first_invalid or self.due_date_entry
 
         return errors, first_invalid
 
@@ -613,81 +563,50 @@ class MaterialRequestView(ctk.CTkFrame):
         if errors:
             messagebox.showwarning(
                 "Validation Required",
-                (
-                    "Please correct the following:\n\n"
-                    + "\n".join(
-                        f"• {error}"
-                        for error in errors
-                    )
-                ),
+                "Please correct the following:\n\n"
+                + "\n".join(f"• {error}" for error in errors),
             )
-
             if first_invalid:
                 first_invalid.focus_set()
-
             return
 
-        selected_project = self.project_option.get()
-        project = self.project_lookup.get(selected_project)
+        project = self.project_lookup[self.project_option.get()]
+        site = self.site_lookup[self.site_option.get()]
 
         data = {
-            "project_id": (
-                project["id"]
-                if project
-                else None
-            ),
-            "project_code": (
-                project.get("project_code", "")
-                if project
-                else ""
-            ),
-            "project_name": selected_project,
-            "client": self.client_entry.get(),
-            "location": self.location_entry.get(),
+            "project_id": project["id"],
+            "site_id": site["id"],
+            "project_code": project.get("project_code", ""),
+            "project_name": project.get("project_name", ""),
+            "client": project.get("client_name", ""),
+            "site_name": site.get("site_name", ""),
             "requested_by": self.user["full_name"],
             "assigned_to": None,
             "assigned_to_id": None,
             "material_request_description": (
-                self.material_description_entry
-                .get()
-                .strip()
+                self.material_description_entry.get().strip()
             ),
             "priority": self.priority_option.get(),
             "status": "New",
             "workflow_status": "New",
             "due_date": self.due_date_entry.get().strip(),
-            "remarks": (
-                self.remarks_box
-                .get("1.0", "end")
-                .strip()
-            ),
+            "remarks": self.remarks_box.get("1.0", "end").strip(),
             "attachments": list(self.attachments),
         }
 
         try:
-            mr_number = create_material_request(
-                data,
-                self.user,
-            )
-
+            mr_number = create_material_request(data, self.user)
             messagebox.showinfo(
                 "Material Request Created",
                 (
-                    f"Material Request {mr_number} was created "
-                    "successfully.\n\n"
-                    "It is currently unassigned and ready for "
-                    "manager assignment."
+                    f"Material Request {mr_number} was created successfully.\n\n"
+                    "It is currently unassigned and ready for manager assignment."
                 ),
             )
-
             if self.on_back:
                 self.on_back()
-
         except Exception as error:
             messagebox.showerror(
                 "Save Failed",
-                (
-                    "Unable to save the Material Request.\n\n"
-                    f"{error}"
-                ),
+                f"Unable to save the Material Request.\n\n{error}",
             )

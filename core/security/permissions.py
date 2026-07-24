@@ -52,51 +52,20 @@ class PermissionService:
     # ============================================================
 
     PERMISSION_ALIASES = {
-        # --------------------------------------------------------
-        # MATERIAL REQUEST LEGACY NAMES
-        # --------------------------------------------------------
-
-        "material_request.view": (
-            "material_requests.view"
-        ),
-        "material_request.create": (
-            "material_requests.create"
-        ),
-        "material_request.edit": (
-            "material_requests.edit"
-        ),
-        "material_request.accept": (
-            "material_requests.accept"
-        ),
-        "material_request.process": (
-            "material_requests.process"
-        ),
-        "material_request.assign": (
-            "material_requests.assign"
-        ),
-        "material_request.reassign": (
-            "material_requests.reassign"
-        ),
-        "material_request.archive": (
-            "material_requests.archive"
-        ),
-        "material_request.restore": (
-            "material_requests.restore"
-        ),
+        "material_request.view": "material_requests.view",
+        "material_request.create": "material_requests.create",
+        "material_request.edit": "material_requests.edit",
+        "material_request.accept": "material_requests.accept",
+        "material_request.process": "material_requests.process",
+        "material_request.assign": "material_requests.assign",
+        "material_request.reassign": "material_requests.reassign",
+        "material_request.archive": "material_requests.archive",
+        "material_request.restore": "material_requests.restore",
         "material_request.force_unlock": (
             "material_requests.force_unlock"
         ),
-
-        # --------------------------------------------------------
-        # OLD ADMINISTRATION PERMISSION NAMES
-        # --------------------------------------------------------
-
-        "users.manage": (
-            "administration.users.manage"
-        ),
-        "roles.manage": (
-            "administration.roles.manage"
-        ),
+        "users.manage": "administration.users.manage",
+        "roles.manage": "administration.roles.manage",
         "departments.manage": (
             "administration.departments.manage"
         ),
@@ -106,9 +75,7 @@ class PermissionService:
         "permissions.manage": (
             "administration.roles.manage"
         ),
-        "audit_logs.view": (
-            "administration.audit.view"
-        ),
+        "audit_logs.view": "administration.audit.view",
     }
 
     # ============================================================
@@ -138,9 +105,7 @@ class PermissionService:
         user: dict | None,
         *roles: str,
     ) -> bool:
-        user_role = cls.normalize_role(
-            user
-        )
+        user_role = cls.normalize_role(user)
 
         allowed_roles = {
             str(role).strip().lower()
@@ -186,31 +151,16 @@ class PermissionService:
         cls,
         user: dict | None,
     ) -> set[str]:
-        """
-        Return all database permissions assigned to the user's role.
-
-        Returns an empty set when:
-        - no user is supplied
-        - no role_id exists
-        - the permission query cannot be resolved
-
-        Legacy compatibility is handled by capability methods below.
-        """
-
         if not user:
             return set()
 
-        role_id = user.get(
-            "role_id"
-        )
+        role_id = user.get("role_id")
 
         if not role_id:
             return set()
 
-        permissions = (
-            PermissionRepository.get_by_role(
-                role_id
-            )
+        permissions = PermissionRepository.get_by_role(
+            role_id
         )
 
         return {
@@ -218,9 +168,7 @@ class PermissionService:
                 permission["permission_name"]
             )
             for permission in permissions
-            if permission.get(
-                "permission_name"
-            )
+            if permission.get("permission_name")
         }
 
     @classmethod
@@ -229,15 +177,6 @@ class PermissionService:
         user: dict | None,
         permission_name: str,
     ) -> bool:
-        """
-        Check one RBAC permission.
-
-        Database role permissions are authoritative when role_id exists.
-
-        Legacy role fallback is only used for old sessions or unmigrated
-        user dictionaries without role_id.
-        """
-
         if not user:
             return False
 
@@ -250,9 +189,7 @@ class PermissionService:
         if not permission_name:
             return False
 
-        role_id = user.get(
-            "role_id"
-        )
+        role_id = user.get("role_id")
 
         if role_id:
             return (
@@ -315,100 +252,70 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_view_material_request(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_material_request(cls, user):
         return cls.has_permission(
             user,
             "material_requests.view",
         )
 
     @classmethod
-    def can_create_material_request(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_create_material_request(cls, user):
         return cls.has_permission(
             user,
             "material_requests.create",
         )
 
     @classmethod
-    def can_edit_material_request(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_edit_material_request(cls, user):
         return cls.has_permission(
             user,
             "material_requests.edit",
         )
 
     @classmethod
-    def can_accept_material_request(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_accept_material_request(cls, user):
         return cls.has_permission(
             user,
             "material_requests.accept",
         )
 
     @classmethod
-    def can_process_material_request(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_process_material_request(cls, user):
         return cls.has_permission(
             user,
             "material_requests.process",
         )
 
     @classmethod
-    def can_assign_material_request(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_assign_material_request(cls, user):
         return cls.has_permission(
             user,
             "material_requests.assign",
         )
 
     @classmethod
-    def can_reassign_material_request(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_reassign_material_request(cls, user):
         return cls.has_permission(
             user,
             "material_requests.reassign",
         )
 
     @classmethod
-    def can_archive_material_request(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_archive_material_request(cls, user):
         return cls.has_permission(
             user,
             "material_requests.archive",
         )
 
     @classmethod
-    def can_restore_material_request(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_restore_material_request(cls, user):
         return cls.has_permission(
             user,
             "material_requests.restore",
         )
 
     @classmethod
-    def can_force_unlock_material_request(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_force_unlock_material_request(cls, user):
         return cls.has_permission(
             user,
             "material_requests.force_unlock",
@@ -419,30 +326,21 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_view_material_request_clarifications(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_material_request_clarifications(cls, user):
         return cls.has_permission(
             user,
             "material_requests.clarifications.view",
         )
 
     @classmethod
-    def can_add_material_request_clarification(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_add_material_request_clarification(cls, user):
         return cls.has_permission(
             user,
             "material_requests.clarifications.add",
         )
 
     @classmethod
-    def can_reply_material_request_clarification(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_reply_material_request_clarification(cls, user):
         return cls.has_permission(
             user,
             "material_requests.clarifications.reply",
@@ -451,18 +349,15 @@ class PermissionService:
     @classmethod
     def can_request_material_request_clarification(
         cls,
-        user: dict | None,
-    ) -> bool:
+        user,
+    ):
         return cls.has_permission(
             user,
             "material_requests.clarifications.request",
         )
 
     @classmethod
-    def can_record_supplier_clarification(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_record_supplier_clarification(cls, user):
         return cls.has_permission(
             user,
             (
@@ -472,10 +367,7 @@ class PermissionService:
         )
 
     @classmethod
-    def can_forward_clarification_to_supplier(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_forward_clarification_to_supplier(cls, user):
         return cls.has_permission(
             user,
             "material_requests.clarifications.forward",
@@ -484,8 +376,8 @@ class PermissionService:
     @classmethod
     def can_resolve_material_request_clarification(
         cls,
-        user: dict | None,
-    ) -> bool:
+        user,
+    ):
         return cls.has_permission(
             user,
             "material_requests.clarifications.resolve",
@@ -494,8 +386,8 @@ class PermissionService:
     @classmethod
     def can_reopen_material_request_clarification(
         cls,
-        user: dict | None,
-    ) -> bool:
+        user,
+    ):
         return cls.has_permission(
             user,
             "material_requests.clarifications.reopen",
@@ -504,8 +396,8 @@ class PermissionService:
     @classmethod
     def can_cancel_material_request_clarification(
         cls,
-        user: dict | None,
-    ) -> bool:
+        user,
+    ):
         return cls.has_permission(
             user,
             "material_requests.clarifications.cancel",
@@ -516,20 +408,14 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_view_material_request_documents(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_material_request_documents(cls, user):
         return cls.has_permission(
             user,
             "material_requests.documents.view",
         )
 
     @classmethod
-    def can_upload_material_request_documents(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_upload_material_request_documents(cls, user):
         return cls.has_permission(
             user,
             "material_requests.documents.upload",
@@ -538,8 +424,8 @@ class PermissionService:
     @classmethod
     def can_delete_own_material_request_documents(
         cls,
-        user: dict | None,
-    ) -> bool:
+        user,
+    ):
         return cls.has_permission(
             user,
             "material_requests.documents.delete_own",
@@ -548,8 +434,8 @@ class PermissionService:
     @classmethod
     def can_acknowledge_material_request_documents(
         cls,
-        user: dict | None,
-    ) -> bool:
+        user,
+    ):
         return cls.has_permission(
             user,
             "material_requests.documents.acknowledge",
@@ -560,63 +446,163 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_view_material_request_amendments(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_material_request_amendments(cls, user):
         return cls.has_permission(
             user,
             "material_requests.amendments.view",
         )
 
     @classmethod
-    def can_request_material_request_amendment(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_request_material_request_amendment(cls, user):
         return cls.has_permission(
             user,
             "material_requests.amendments.request",
         )
 
     @classmethod
-    def can_review_material_request_amendment(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_review_material_request_amendment(cls, user):
         return cls.has_permission(
             user,
             "material_requests.amendments.review",
         )
 
     @classmethod
-    def can_approve_material_request_amendment(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_approve_material_request_amendment(cls, user):
         return cls.has_permission(
             user,
             "material_requests.amendments.approve",
         )
 
     @classmethod
-    def can_reject_material_request_amendment(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_reject_material_request_amendment(cls, user):
         return cls.has_permission(
             user,
             "material_requests.amendments.reject",
         )
 
     @classmethod
-    def can_view_material_request_revisions(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_material_request_revisions(cls, user):
         return cls.has_permission(
             user,
             "material_requests.revisions.view",
+        )
+
+    # ============================================================
+    # MASTER DATA - CLIENTS
+    # ============================================================
+
+    @classmethod
+    def can_view_clients(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.clients.view",
+        )
+
+    @classmethod
+    def can_create_clients(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.clients.create",
+        )
+
+    @classmethod
+    def can_edit_clients(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.clients.edit",
+        )
+
+    @classmethod
+    def can_archive_clients(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.clients.archive",
+        )
+
+    @classmethod
+    def can_restore_clients(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.clients.restore",
+        )
+
+    # ============================================================
+    # MASTER DATA - PROJECTS
+    # ============================================================
+
+    @classmethod
+    def can_view_projects(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.projects.view",
+        )
+
+    @classmethod
+    def can_create_projects(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.projects.create",
+        )
+
+    @classmethod
+    def can_edit_projects(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.projects.edit",
+        )
+
+    @classmethod
+    def can_archive_projects(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.projects.archive",
+        )
+
+    @classmethod
+    def can_restore_projects(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.projects.restore",
+        )
+
+
+    # ============================================================
+    # MASTER DATA - SITES
+    # ============================================================
+
+    @classmethod
+    def can_view_sites(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.sites.view",
+        )
+
+    @classmethod
+    def can_create_sites(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.sites.create",
+        )
+
+    @classmethod
+    def can_edit_sites(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.sites.edit",
+        )
+
+    @classmethod
+    def can_archive_sites(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.sites.archive",
+        )
+
+    @classmethod
+    def can_restore_sites(cls, user):
+        return cls.has_permission(
+            user,
+            "master_data.sites.restore",
         )
 
     # ============================================================
@@ -624,50 +610,35 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_manage_users(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_manage_users(cls, user):
         return cls.has_permission(
             user,
             "administration.users.manage",
         )
 
     @classmethod
-    def can_manage_roles(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_manage_roles(cls, user):
         return cls.has_permission(
             user,
             "administration.roles.manage",
         )
 
     @classmethod
-    def can_manage_departments(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_manage_departments(cls, user):
         return cls.has_permission(
             user,
             "administration.departments.manage",
         )
 
     @classmethod
-    def can_manage_job_titles(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_manage_job_titles(cls, user):
         return cls.has_permission(
             user,
             "administration.job_titles.manage",
         )
 
     @classmethod
-    def can_view_audit_logs(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_audit_logs(cls, user):
         return cls.has_permission(
             user,
             "administration.audit.view",
@@ -678,20 +649,14 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_view_supplier_rfq(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_supplier_rfq(cls, user):
         return cls.has_permission(
             user,
             "supplier_rfq.view",
         )
 
     @classmethod
-    def can_manage_supplier_quotations(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_manage_supplier_quotations(cls, user):
         return cls.has_any_permission(
             user,
             (
@@ -706,20 +671,14 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_view_material_costing(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_material_costing(cls, user):
         return cls.has_permission(
             user,
             "material_costing.view",
         )
 
     @classmethod
-    def can_manage_material_costing(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_manage_material_costing(cls, user):
         return cls.has_any_permission(
             user,
             (
@@ -734,20 +693,14 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_view_purchase_orders(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_purchase_orders(cls, user):
         return cls.has_permission(
             user,
             "purchase_orders.view",
         )
 
     @classmethod
-    def can_manage_purchase_orders(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_manage_purchase_orders(cls, user):
         return cls.has_any_permission(
             user,
             (
@@ -758,10 +711,7 @@ class PermissionService:
         )
 
     @classmethod
-    def can_approve_purchase_orders(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_approve_purchase_orders(cls, user):
         return cls.has_permission(
             user,
             "purchase_orders.approve",
@@ -772,20 +722,14 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_view_inventory(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_inventory(cls, user):
         return cls.has_permission(
             user,
             "inventory.view",
         )
 
     @classmethod
-    def can_manage_inventory(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_manage_inventory(cls, user):
         return cls.has_permission(
             user,
             "inventory.manage",
@@ -796,20 +740,14 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_view_invoices(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_invoices(cls, user):
         return cls.has_permission(
             user,
             "invoice_monitoring.view",
         )
 
     @classmethod
-    def can_manage_invoices(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_manage_invoices(cls, user):
         return cls.has_permission(
             user,
             "invoice_monitoring.manage",
@@ -820,10 +758,7 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_view_reports(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_view_reports(cls, user):
         return cls.has_permission(
             user,
             "reports.view",
@@ -834,10 +769,7 @@ class PermissionService:
     # ============================================================
 
     @classmethod
-    def can_manage_settings(
-        cls,
-        user: dict | None,
-    ) -> bool:
+    def can_manage_settings(cls, user):
         return cls.has_permission(
             user,
             "settings.manage",
@@ -853,12 +785,6 @@ class PermissionService:
         user: dict | None,
         permission_name: str,
     ) -> bool:
-        """
-        Temporary fallback for old session dictionaries without role_id.
-
-        This must not replace database RBAC for migrated users.
-        """
-
         permission_name = (
             cls.normalize_permission_name(
                 permission_name
@@ -868,13 +794,20 @@ class PermissionService:
         if cls.is_administrator(user):
             return True
 
-        role = cls.normalize_role(
-            user
-        )
+        role = cls.normalize_role(user)
+
+        common_view = {
+            "material_requests.view",
+            "supplier_rfq.view",
+            "purchase_orders.view",
+            "inventory.view",
+            "reports.view",
+            "master_data.clients.view",
+            "master_data.projects.view",
+        }
 
         legacy_permissions = {
-            cls.PURCHASING_MANAGER: {
-                "material_requests.view",
+            cls.PURCHASING_MANAGER: common_view | {
                 "material_requests.create",
                 "material_requests.edit",
                 "material_requests.accept",
@@ -883,43 +816,18 @@ class PermissionService:
                 "material_requests.reassign",
                 "material_requests.archive",
                 "material_requests.restore",
-                (
-                    "material_requests."
-                    "clarifications.view"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.add"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.reply"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.request"
-                ),
+                "material_requests.clarifications.view",
+                "material_requests.clarifications.add",
+                "material_requests.clarifications.reply",
+                "material_requests.clarifications.request",
                 (
                     "material_requests."
                     "clarifications.record_supplier"
                 ),
-                (
-                    "material_requests."
-                    "clarifications.forward"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.resolve"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.reopen"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.cancel"
-                ),
-                "supplier_rfq.view",
+                "material_requests.clarifications.forward",
+                "material_requests.clarifications.resolve",
+                "material_requests.clarifications.reopen",
+                "material_requests.clarifications.cancel",
                 "supplier_rfq.create",
                 "supplier_rfq.edit",
                 "supplier_rfq.manage",
@@ -928,55 +836,37 @@ class PermissionService:
                 "material_costing.create",
                 "material_costing.edit",
                 "material_costing.manage",
-                "purchase_orders.view",
                 "purchase_orders.create",
                 "purchase_orders.edit",
                 "purchase_orders.monitor",
-                "inventory.view",
                 "invoice_monitoring.view",
-                "reports.view",
                 "reports.purchasing.view",
                 "administration.audit.view",
+                "master_data.clients.create",
+                "master_data.clients.edit",
+                "master_data.clients.archive",
+                "master_data.clients.restore",
+                "master_data.projects.create",
+                "master_data.projects.edit",
+                "master_data.projects.archive",
+                "master_data.projects.restore",
             },
 
-            cls.PURCHASING_OFFICER: {
-                "material_requests.view",
+            cls.PURCHASING_OFFICER: common_view | {
                 "material_requests.edit",
                 "material_requests.accept",
                 "material_requests.process",
-                (
-                    "material_requests."
-                    "clarifications.view"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.add"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.reply"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.request"
-                ),
+                "material_requests.clarifications.view",
+                "material_requests.clarifications.add",
+                "material_requests.clarifications.reply",
+                "material_requests.clarifications.request",
                 (
                     "material_requests."
                     "clarifications.record_supplier"
                 ),
-                (
-                    "material_requests."
-                    "clarifications.forward"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.resolve"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.reopen"
-                ),
-                "supplier_rfq.view",
+                "material_requests.clarifications.forward",
+                "material_requests.clarifications.resolve",
+                "material_requests.clarifications.reopen",
                 "supplier_rfq.create",
                 "supplier_rfq.edit",
                 "supplier_rfq.manage",
@@ -984,85 +874,51 @@ class PermissionService:
                 "material_costing.create",
                 "material_costing.edit",
                 "material_costing.manage",
-                "purchase_orders.view",
                 "purchase_orders.create",
                 "purchase_orders.edit",
                 "purchase_orders.monitor",
-                "inventory.view",
                 "invoice_monitoring.view",
-                "reports.view",
                 "reports.purchasing.view",
+                "master_data.clients.create",
+                "master_data.clients.edit",
+                "master_data.projects.create",
+                "master_data.projects.edit",
+                "master_data.sites.create",
+                "master_data.sites.edit",
             },
 
-            cls.PROJECT_ENGINEER: {
-                "material_requests.view",
+            cls.PROJECT_ENGINEER: common_view | {
                 "material_requests.create",
                 "material_requests.edit",
-                (
-                    "material_requests."
-                    "clarifications.view"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.add"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.reply"
-                ),
+                "material_requests.clarifications.view",
+                "material_requests.clarifications.add",
+                "material_requests.clarifications.reply",
                 "material_requests.documents.view",
                 "material_requests.documents.upload",
-                (
-                    "material_requests."
-                    "documents.delete_own"
-                ),
+                "material_requests.documents.delete_own",
                 "material_requests.amendments.view",
                 "material_requests.amendments.request",
                 "material_requests.revisions.view",
-                "supplier_rfq.view",
-                "purchase_orders.view",
-                "inventory.view",
-                "reports.view",
                 "reports.project.view",
             },
 
-            cls.PROJECT_MANAGER: {
-                "material_requests.view",
+            cls.PROJECT_MANAGER: common_view | {
                 "material_requests.create",
                 "material_requests.edit",
-                (
-                    "material_requests."
-                    "clarifications.view"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.add"
-                ),
-                (
-                    "material_requests."
-                    "clarifications.reply"
-                ),
+                "material_requests.clarifications.view",
+                "material_requests.clarifications.add",
+                "material_requests.clarifications.reply",
                 "material_requests.documents.view",
                 "material_requests.documents.upload",
-                (
-                    "material_requests."
-                    "documents.delete_own"
-                ),
+                "material_requests.documents.delete_own",
                 "material_requests.amendments.view",
                 "material_requests.amendments.request",
                 "material_requests.revisions.view",
-                "supplier_rfq.view",
                 "material_costing.view",
-                "purchase_orders.view",
-                "inventory.view",
-                "reports.view",
                 "reports.project.view",
             },
 
-            cls.WAREHOUSE: {
-                "material_requests.view",
-                "purchase_orders.view",
-                "inventory.view",
+            cls.WAREHOUSE: common_view | {
                 "inventory.manage",
                 "inventory.stock_in",
                 "inventory.stock_out",
@@ -1072,14 +928,10 @@ class PermissionService:
                 "receiving.view",
                 "receiving.record",
                 "receiving.documents.upload",
-                "reports.view",
                 "reports.inventory.view",
             },
 
-            cls.WAREHOUSE_PERSONNEL: {
-                "material_requests.view",
-                "purchase_orders.view",
-                "inventory.view",
+            cls.WAREHOUSE_PERSONNEL: common_view | {
                 "inventory.manage",
                 "inventory.stock_in",
                 "inventory.stock_out",
@@ -1089,58 +941,39 @@ class PermissionService:
                 "receiving.view",
                 "receiving.record",
                 "receiving.documents.upload",
-                "reports.view",
                 "reports.inventory.view",
             },
 
-            cls.ACCOUNTING: {
-                "material_requests.view",
-                "supplier_rfq.view",
+            cls.ACCOUNTING: common_view | {
                 "material_costing.view",
-                "purchase_orders.view",
-                "inventory.view",
                 "receiving.view",
                 "invoice_monitoring.view",
                 "invoice_monitoring.create",
                 "invoice_monitoring.edit",
                 "invoice_monitoring.manage",
-                "reports.view",
                 "reports.accounting.view",
                 "reports.purchasing.view",
             },
 
-            cls.ACCOUNTING_PERSONNEL: {
-                "material_requests.view",
-                "supplier_rfq.view",
+            cls.ACCOUNTING_PERSONNEL: common_view | {
                 "material_costing.view",
-                "purchase_orders.view",
-                "inventory.view",
                 "receiving.view",
                 "invoice_monitoring.view",
                 "invoice_monitoring.create",
                 "invoice_monitoring.edit",
                 "invoice_monitoring.manage",
-                "reports.view",
                 "reports.accounting.view",
                 "reports.purchasing.view",
             },
 
-            cls.EXECUTIVE_MANAGEMENT: {
-                "material_requests.view",
-                (
-                    "material_requests."
-                    "clarifications.view"
-                ),
+            cls.EXECUTIVE_MANAGEMENT: common_view | {
+                "material_requests.clarifications.view",
                 "material_requests.documents.view",
                 "material_requests.amendments.view",
                 "material_requests.revisions.view",
-                "supplier_rfq.view",
                 "material_costing.view",
-                "purchase_orders.view",
-                "inventory.view",
                 "receiving.view",
                 "invoice_monitoring.view",
-                "reports.view",
                 "reports.purchasing.view",
                 "reports.project.view",
                 "reports.inventory.view",
@@ -1148,41 +981,25 @@ class PermissionService:
                 "reports.executive.view",
             },
 
-            cls.VIEWER: {
-                "material_requests.view",
-                (
-                    "material_requests."
-                    "clarifications.view"
-                ),
+            cls.VIEWER: common_view | {
+                "material_requests.clarifications.view",
                 "material_requests.documents.view",
                 "material_requests.amendments.view",
                 "material_requests.revisions.view",
-                "supplier_rfq.view",
                 "material_costing.view",
-                "purchase_orders.view",
-                "inventory.view",
                 "receiving.view",
                 "invoice_monitoring.view",
-                "reports.view",
                 "administration.audit.view",
             },
 
-            cls.VIEWER_AUDITOR: {
-                "material_requests.view",
-                (
-                    "material_requests."
-                    "clarifications.view"
-                ),
+            cls.VIEWER_AUDITOR: common_view | {
+                "material_requests.clarifications.view",
                 "material_requests.documents.view",
                 "material_requests.amendments.view",
                 "material_requests.revisions.view",
-                "supplier_rfq.view",
                 "material_costing.view",
-                "purchase_orders.view",
-                "inventory.view",
                 "receiving.view",
                 "invoice_monitoring.view",
-                "reports.view",
                 "administration.audit.view",
             },
         }

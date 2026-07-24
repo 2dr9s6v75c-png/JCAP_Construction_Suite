@@ -22,6 +22,31 @@ def create_material_request(data: dict, user: dict) -> str:
     mr_number = generate_document_number("MR")
 
     try:
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM master.sites s
+                JOIN master.projects p
+                    ON p.id = s.project_id
+                WHERE s.id = %s
+                  AND s.project_id = %s
+                  AND s.is_active = TRUE
+                  AND p.is_active = TRUE
+            )
+            """,
+            (
+                data.get("site_id"),
+                data.get("project_id"),
+            ),
+        )
+
+        if not cur.fetchone()[0]:
+            raise ValueError(
+                "The selected active Site does not belong to "
+                "the selected active Project."
+            )
+
         saved_files = copy_attachments_to_request_folder(
             attachments=data.get("attachments", []),
             project_code=data.get("project_code"),
@@ -35,6 +60,7 @@ def create_material_request(data: dict, user: dict) -> str:
                 request_no,
                 mr_number,
                 project_id,
+                site_id,
                 request_description,
                 material_request_description,
                 requested_by,
@@ -48,7 +74,7 @@ def create_material_request(data: dict, user: dict) -> str:
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s
             )
             RETURNING id
             """,
@@ -56,6 +82,7 @@ def create_material_request(data: dict, user: dict) -> str:
                 mr_number,
                 mr_number,
                 data["project_id"],
+                data["site_id"],
                 data["material_request_description"],
                 data["material_request_description"],
                 data["requested_by"],
@@ -149,17 +176,28 @@ def get_material_requests(status_filter="Active"):
                 mr.mr_number,
                 p.project_code,
                 p.project_name,
+                c.client_name,
+                s.site_code,
+                s.site_name,
                 mr.material_request_description,
                 mr.requested_by,
                 mr.assigned_to,
+                assigned_user.full_name,
+                assigned_user.username,
                 mr.priority,
                 mr.status,
                 mr.due_date,
                 mr.created_at,
                 COUNT(att.id) AS attachment_count
             FROM quotation.material_requests mr
-            JOIN core.projects p
+            JOIN master.projects p
                 ON mr.project_id = p.id
+            JOIN master.clients c
+                ON p.client_id = c.id
+            JOIN master.sites s
+                ON mr.site_id = s.id
+            LEFT JOIN core.users assigned_user
+                ON mr.assigned_to = assigned_user.id::text
             LEFT JOIN quotation.material_request_attachments att
                 ON mr.id = att.material_request_id
             {where_clause}
@@ -168,9 +206,14 @@ def get_material_requests(status_filter="Active"):
                 mr.mr_number,
                 p.project_code,
                 p.project_name,
+                c.client_name,
+                s.site_code,
+                s.site_name,
                 mr.material_request_description,
                 mr.requested_by,
                 mr.assigned_to,
+                assigned_user.full_name,
+                assigned_user.username,
                 mr.priority,
                 mr.status,
                 mr.due_date,
@@ -187,17 +230,25 @@ def get_material_requests(status_filter="Active"):
                 "id": str(row[0]),
                 "mr_number": row[1],
                 "project_code": row[2] or "",
-                "project_name": row[3],
-                "description": row[4],
-                "requested_by": row[5],
+                "project_name": row[3] or "",
+                "client_name": row[4] or "",
+                "site_code": row[5] or "",
+                "site_name": row[6] or "",
+                "description": row[7] or "",
+                "requested_by": row[8] or "",
                 "assigned_to": (
-                    str(row[6]) if row[6] else None
+                    str(row[9]) if row[9] else None
                 ),
-                "priority": row[7],
-                "status": row[8],
-                "due_date": row[9],
-                "created_at": row[10],
-                "attachment_count": row[11],
+                "assigned_to_id": (
+                    str(row[9]) if row[9] else None
+                ),
+                "assigned_to_name": row[10] or "",
+                "assigned_to_username": row[11] or "",
+                "priority": row[12] or "",
+                "status": row[13] or "",
+                "due_date": row[14],
+                "created_at": row[15],
+                "attachment_count": row[16] or 0,
             }
             for row in rows
         ]
@@ -225,7 +276,9 @@ def get_material_request(material_request_id: str):
                 p.project_code,
                 p.project_name,
                 c.client_name,
-                p.location,
+                mr.site_id,
+                s.site_code,
+                s.site_name,
                 mr.material_request_description,
                 mr.requested_by,
                 mr.assigned_to,
@@ -239,10 +292,12 @@ def get_material_request(material_request_id: str):
                 mr.created_at,
                 mr.current_assignment_id
             FROM quotation.material_requests mr
-            JOIN core.projects p
+            JOIN master.projects p
                 ON mr.project_id = p.id
-            LEFT JOIN core.clients c
+            JOIN master.clients c
                 ON p.client_id = c.id
+            JOIN master.sites s
+                ON mr.site_id = s.id
             LEFT JOIN core.users assigned_user
                 ON mr.assigned_to = assigned_user.id::text
             WHERE mr.id = %s
@@ -273,7 +328,7 @@ def get_material_request(material_request_id: str):
 
         attachments = cur.fetchall()
 
-        assigned_to_id = row[9]
+        assigned_to_id = row[11]
 
         return {
             "id": str(row[0]),
@@ -282,9 +337,12 @@ def get_material_request(material_request_id: str):
             "project_code": row[3] or "",
             "project_name": row[4] or "",
             "client_name": row[5] or "",
-            "location": row[6] or "",
-            "material_request_description": row[7] or "",
-            "requested_by": row[8] or "",
+            "site_id": str(row[6]),
+            "site_code": row[7] or "",
+            "site_name": row[8] or "",
+            "location": row[8] or "",
+            "material_request_description": row[9] or "",
+            "requested_by": row[10] or "",
             "assigned_to": (
                 str(assigned_to_id)
                 if assigned_to_id
@@ -295,19 +353,19 @@ def get_material_request(material_request_id: str):
                 if assigned_to_id
                 else None
             ),
-            "assigned_to_name": row[10] or "",
-            "assigned_to_username": row[11] or "",
-            "priority": row[12] or "",
-            "status": row[13] or "",
-            "due_date": row[14],
-            "remarks": row[15] or "",
-            "folder_name": row[16] or "",
-            "created_at": row[17],
+            "assigned_to_name": row[12] or "",
+            "assigned_to_username": row[13] or "",
+            "priority": row[14] or "",
+            "status": row[15] or "",
+            "due_date": row[16],
+            "remarks": row[17] or "",
+            "folder_name": row[18] or "",
+            "created_at": row[19],
             "current_assignment_id": (
-                str(row[18]) if row[18] else None
+                str(row[20]) if row[20] else None
             ),
             "assignment_id": (
-                str(row[18]) if row[18] else None
+                str(row[20]) if row[20] else None
             ),
             "attachments": [
                 {

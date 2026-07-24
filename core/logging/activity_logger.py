@@ -14,6 +14,7 @@ class ActivityLogger:
     """
 
     MODULE_QUOTATION = "Quotation Monitoring"
+    MODULE_MASTER_DATA = "Master Data"
     MODULE_ADMINISTRATION = "Administration"
     MODULE_PURCHASE_ORDER = "Purchase Orders"
     MODULE_INVENTORY = "Inventory"

@@ -1,4 +1,8 @@
 from datetime import date, datetime
+import os
+from pathlib import Path
+import subprocess
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
@@ -13,6 +17,15 @@ from core.security.permissions import PermissionService
 from modules.quotation.components.assignment_dialog import AssignmentDialog
 from modules.quotation.components.collaboration_banner import (
     CollaborationBanner,
+)
+from modules.quotation.components.supplier_quotation_dialog import (
+    SupplierQuotationDialog,
+)
+from modules.quotation.processes.supplier_quotation_process import (
+    SupplierQuotationProcess,
+)
+from modules.quotation.sections.supplier_quotations_tab import (
+    SupplierQuotationsTab,
 )
 from modules.quotation.processes.material_request_assignment_process import (
     MaterialRequestAssignmentProcess,
@@ -81,10 +94,21 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             MaterialRequestAssignmentProcess()
         )
 
+        self.supplier_quotation_process = (
+            SupplierQuotationProcess()
+        )
+
+        self.supplier_quotations = []
+        self.supplier_quotations_section = None
+
         self.header = None
         self.summary = None
         self.collaboration_banner = None
         self.tabview = None
+
+        self.load_supplier_quotations(
+            notify_on_error=False
+        )
 
         self.build_ui()
 
@@ -150,7 +174,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
         is_assigned = bool(
             self.request
-            and self.request.get("assigned_to")
+            and self.request.get("current_assignment_id")
         )
 
         self.header.set_assignment_state(
@@ -273,6 +297,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             "Attachments"
         )
 
+        supplier_quotations_parent = self.tabview.add(
+            "Supplier Quotations"
+        )
+
         clarifications_parent = self.tabview.add(
             "Supplier Clarifications"
         )
@@ -287,6 +315,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
         self.build_attachments_tab(
             attachments_parent
+        )
+
+        self.build_supplier_quotation_tab(
+            supplier_quotations_parent
         )
 
         self.build_clarifications_tab(
@@ -440,6 +472,67 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             weight=1,
         )
 
+    def build_supplier_quotation_tab(self, parent):
+        self.supplier_quotations_section = (
+            SupplierQuotationsTab(
+                parent,
+                quotations=self.supplier_quotations,
+                can_add=(
+                    not self.is_archived()
+                    and PermissionService
+                    .can_manage_supplier_quotations(
+                        self.user
+                    )
+                ),
+                can_edit=(
+                    not self.is_archived()
+                    and PermissionService
+                    .can_manage_supplier_quotations(
+                        self.user
+                    )
+                ),
+                can_archive=(
+                    not self.is_archived()
+                    and PermissionService
+                    .can_manage_supplier_quotations(
+                        self.user
+                    )
+                ),
+                can_restore=(
+                    not self.is_archived()
+                    and PermissionService
+                    .can_manage_supplier_quotations(
+                        self.user
+                    )
+                ),
+                on_add=self.open_new_supplier_quotation_dialog,
+                on_open=self.open_supplier_quotation_files,
+                on_edit=self.open_edit_supplier_quotation_dialog,
+                on_upload_files=(
+                    self.upload_supplier_quotation_files
+                ),
+                on_archive=self.archive_supplier_quotation,
+                on_restore=self.restore_supplier_quotation,
+                on_refresh=self.refresh_supplier_quotations,
+            )
+        )
+
+        self.supplier_quotations_section.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+
+        parent.grid_columnconfigure(
+            0,
+            weight=1,
+        )
+
+        parent.grid_rowconfigure(
+            0,
+            weight=1,
+        )
+
     def build_clarifications_tab(self, parent):
         can_record = (
             not self.is_archived()
@@ -497,6 +590,586 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             0,
             weight=1,
         )
+
+    # ============================================================
+    # SUPPLIER QUOTATION ACTIONS
+    # ============================================================
+
+    def open_new_supplier_quotation_dialog(self):
+        if self.is_archived():
+            NotificationService.error(
+                (
+                    "Supplier Quotations cannot be added "
+                    "to an archived Material Request."
+                ),
+                title="Supplier Quotations",
+            )
+            return
+
+        if not PermissionService.can_manage_supplier_quotations(
+            self.user
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to create "
+                    "Supplier Quotations."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        SupplierQuotationDialog(
+            self,
+            mode=SupplierQuotationDialog.MODE_CREATE,
+            on_save=self.create_supplier_quotation,
+        )
+
+    def create_supplier_quotation(self, form_data):
+        result = self.supplier_quotation_process.create(
+            material_request_id=self.material_request_id,
+            supplier_name=form_data["supplier_name"],
+            current_user=self.user,
+            quotation_reference=form_data.get(
+                "quotation_reference"
+            ),
+            quotation_date=form_data.get(
+                "quotation_date"
+            ),
+            remarks=form_data.get("remarks"),
+            status=form_data["status"],
+        )
+
+        self.refresh_supplier_quotations()
+
+        created_quotation = (
+            result.get("supplier_quotation", {})
+            if isinstance(result, dict)
+            else {}
+        )
+
+        supplier_name = (
+            created_quotation.get("supplier_name")
+            or form_data["supplier_name"]
+        )
+
+        NotificationService.success(
+            (
+                f"Supplier Quotation from {supplier_name} "
+                "was created successfully."
+            ),
+            title="Supplier Quotation Created",
+        )
+
+        return result
+
+    def open_edit_supplier_quotation_dialog(
+        self,
+        quotation,
+    ):
+        if self.is_archived():
+            NotificationService.error(
+                (
+                    "Supplier Quotations cannot be edited "
+                    "while the Material Request is archived."
+                ),
+                title="Supplier Quotations",
+            )
+            return
+
+        if not PermissionService.can_manage_supplier_quotations(
+            self.user
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to edit "
+                    "Supplier Quotations."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        if not quotation or not quotation.get("id"):
+            NotificationService.error(
+                "Select a valid Supplier Quotation.",
+                title="Supplier Quotations",
+            )
+            return
+
+        if quotation.get("is_archived"):
+            NotificationService.error(
+                (
+                    "Archived Supplier Quotations must be "
+                    "restored before they can be edited."
+                ),
+                title="Supplier Quotations",
+            )
+            return
+
+        quotation_id = quotation["id"]
+
+        latest_quotation = (
+            self.supplier_quotation_process.get_by_id(
+                quotation_id
+            )
+        )
+
+        SupplierQuotationDialog(
+            self,
+            mode=SupplierQuotationDialog.MODE_EDIT,
+            quotation=latest_quotation,
+            on_save=lambda form_data: (
+                self.update_supplier_quotation(
+                    quotation_id,
+                    form_data,
+                )
+            ),
+        )
+
+    def update_supplier_quotation(
+        self,
+        supplier_quotation_id,
+        form_data,
+    ):
+        updated = self.supplier_quotation_process.update(
+            supplier_quotation_id=(
+                supplier_quotation_id
+            ),
+            supplier_name=form_data["supplier_name"],
+            current_user=self.user,
+            quotation_reference=form_data.get(
+                "quotation_reference"
+            ),
+            quotation_date=form_data.get(
+                "quotation_date"
+            ),
+            remarks=form_data.get("remarks"),
+            status=form_data["status"],
+        )
+
+        self.refresh_supplier_quotations()
+
+        supplier_name = (
+            updated.get("supplier_name")
+            if isinstance(updated, dict)
+            else None
+        ) or form_data["supplier_name"]
+
+        NotificationService.success(
+            (
+                f"Supplier Quotation from {supplier_name} "
+                "was updated successfully."
+            ),
+            title="Supplier Quotation Updated",
+        )
+
+        return updated
+
+    def open_supplier_quotation_files(
+        self,
+        quotation,
+    ):
+        if not quotation or not quotation.get("id"):
+            NotificationService.error(
+                "Select a valid Supplier Quotation.",
+                title="Supplier Quotations",
+            )
+            return
+
+        try:
+            files = (
+                self.supplier_quotation_process
+                .list_files(quotation["id"])
+                or []
+            )
+
+            valid_paths = []
+
+            for file_record in files:
+                folder_path = str(
+                    file_record.get("folder_path") or ""
+                ).strip()
+
+                stored_filename = str(
+                    file_record.get("stored_filename") or ""
+                ).strip()
+
+                if not folder_path or not stored_filename:
+                    continue
+
+                full_path = (
+                    Path(folder_path) / stored_filename
+                )
+
+                if full_path.is_file():
+                    valid_paths.append(full_path)
+
+            if not valid_paths:
+                NotificationService.warning(
+                    (
+                        "No available files were found for "
+                        "the selected Supplier Quotation."
+                    ),
+                    title="No Quotation Files",
+                )
+                return
+
+            if len(valid_paths) == 1:
+                os.startfile(str(valid_paths[0]))
+                return
+
+            first_file = valid_paths[0]
+
+            subprocess.Popen(
+                [
+                    "explorer",
+                    f"/select,{first_file}",
+                ]
+            )
+
+            NotificationService.info(
+                (
+                    f"{len(valid_paths)} files are attached. "
+                    "The quotation folder has been opened."
+                ),
+                title="Supplier Quotation Files",
+            )
+
+        except Exception as error:
+            NotificationService.error(
+                (
+                    "Unable to open the Supplier "
+                    "Quotation files."
+                ),
+                title="Open Quotation Failed",
+                error=error,
+            )
+
+    def upload_supplier_quotation_files(
+        self,
+        quotation,
+    ):
+        if self.is_archived():
+            NotificationService.error(
+                (
+                    "Files cannot be uploaded while the "
+                    "Material Request is archived."
+                ),
+                title="Supplier Quotations",
+            )
+            return
+
+        if not PermissionService.can_manage_supplier_quotations(
+            self.user
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to upload "
+                    "Supplier Quotation files."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        if not quotation or not quotation.get("id"):
+            NotificationService.error(
+                "Select a valid Supplier Quotation.",
+                title="Supplier Quotations",
+            )
+            return
+
+        if quotation.get("is_archived"):
+            NotificationService.error(
+                (
+                    "Archived Supplier Quotations must be "
+                    "restored before files can be uploaded."
+                ),
+                title="Supplier Quotations",
+            )
+            return
+
+        selected_files = filedialog.askopenfilenames(
+            parent=self,
+            title="Select Supplier Quotation Files",
+            filetypes=(
+                (
+                    "Supported quotation files",
+                    (
+                        "*.pdf",
+                        "*.xlsx",
+                        "*.xls",
+                        "*.csv",
+                        "*.docx",
+                        "*.doc",
+                        "*.png",
+                        "*.jpg",
+                        "*.jpeg",
+                        "*.webp",
+                    ),
+                ),
+                ("PDF files", "*.pdf"),
+                (
+                    "Spreadsheet files",
+                    "*.xlsx *.xls *.csv",
+                ),
+                (
+                    "Image files",
+                    "*.png *.jpg *.jpeg *.webp",
+                ),
+                (
+                    "Word documents",
+                    "*.docx *.doc",
+                ),
+                ("All files", "*.*"),
+            ),
+        )
+
+        if not selected_files:
+            return
+
+        try:
+            uploaded_files = (
+                self.supplier_quotation_process
+                .upload_files(
+                    supplier_quotation_id=quotation["id"],
+                    files=selected_files,
+                    current_user=self.user,
+                )
+            )
+
+            self.refresh_supplier_quotations()
+
+            file_count = len(uploaded_files or [])
+            supplier_name = str(
+                quotation.get("supplier_name") or "supplier"
+            )
+
+            NotificationService.success(
+                (
+                    f"{file_count} file(s) uploaded for "
+                    f"{supplier_name}."
+                ),
+                title="Supplier Quotation Files Uploaded",
+            )
+
+        except Exception as error:
+            NotificationService.error(
+                (
+                    "Unable to upload the selected Supplier "
+                    "Quotation files."
+                ),
+                title="Upload Failed",
+                error=error,
+            )
+
+    def archive_supplier_quotation(
+        self,
+        quotation,
+    ):
+        if self.is_archived():
+            NotificationService.error(
+                (
+                    "Supplier Quotations cannot be changed "
+                    "while the Material Request is archived."
+                ),
+                title="Supplier Quotations",
+            )
+            return
+
+        if not PermissionService.can_manage_supplier_quotations(
+            self.user
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to archive "
+                    "Supplier Quotations."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        if not quotation or not quotation.get("id"):
+            NotificationService.error(
+                "Select a valid Supplier Quotation.",
+                title="Supplier Quotations",
+            )
+            return
+
+        if quotation.get("is_archived"):
+            NotificationService.warning(
+                (
+                    "The selected Supplier Quotation is "
+                    "already archived."
+                ),
+                title="Supplier Quotations",
+            )
+            return
+
+        supplier_name = str(
+            quotation.get("supplier_name")
+            or "the selected supplier"
+        )
+
+        confirmed = messagebox.askyesno(
+            title="Archive Supplier Quotation",
+            message=(
+                f"Archive the Supplier Quotation from "
+                f"{supplier_name}?\n\n"
+                "The record and attached files will be "
+                "preserved and can be restored later."
+            ),
+            parent=self,
+        )
+
+        if not confirmed:
+            return
+
+        try:
+            self.supplier_quotation_process.archive(
+                supplier_quotation_id=quotation["id"],
+                current_user=self.user,
+            )
+
+            self.refresh_supplier_quotations()
+
+            NotificationService.success(
+                (
+                    f"Supplier Quotation from {supplier_name} "
+                    "was archived successfully."
+                ),
+                title="Supplier Quotation Archived",
+            )
+
+        except Exception as error:
+            NotificationService.error(
+                (
+                    "Unable to archive the selected Supplier "
+                    "Quotation."
+                ),
+                title="Archive Failed",
+                error=error,
+            )
+
+    def restore_supplier_quotation(
+        self,
+        quotation,
+    ):
+        if self.is_archived():
+            NotificationService.error(
+                (
+                    "Supplier Quotations cannot be changed "
+                    "while the Material Request is archived."
+                ),
+                title="Supplier Quotations",
+            )
+            return
+
+        if not PermissionService.can_manage_supplier_quotations(
+            self.user
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to restore "
+                    "Supplier Quotations."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        if not quotation or not quotation.get("id"):
+            NotificationService.error(
+                "Select a valid Supplier Quotation.",
+                title="Supplier Quotations",
+            )
+            return
+
+        if not quotation.get("is_archived"):
+            NotificationService.warning(
+                (
+                    "The selected Supplier Quotation is "
+                    "already active."
+                ),
+                title="Supplier Quotations",
+            )
+            return
+
+        supplier_name = str(
+            quotation.get("supplier_name")
+            or "the selected supplier"
+        )
+
+        try:
+            self.supplier_quotation_process.restore(
+                supplier_quotation_id=quotation["id"],
+                current_user=self.user,
+            )
+
+            self.refresh_supplier_quotations()
+
+            NotificationService.success(
+                (
+                    f"Supplier Quotation from {supplier_name} "
+                    "was restored successfully."
+                ),
+                title="Supplier Quotation Restored",
+            )
+
+        except Exception as error:
+            NotificationService.error(
+                (
+                    "Unable to restore the selected Supplier "
+                    "Quotation."
+                ),
+                title="Restore Failed",
+                error=error,
+            )
+
+    # ============================================================
+    # SUPPLIER QUOTATION DATA
+    # ============================================================
+
+    def load_supplier_quotations(
+        self,
+        notify_on_error=True,
+    ):
+        try:
+            self.supplier_quotations = (
+                self.supplier_quotation_process
+                .list_by_material_request(
+                    self.material_request_id,
+                    status_filter="All",
+                )
+                or []
+            )
+
+            return True
+
+        except Exception as error:
+            self.supplier_quotations = []
+
+            if notify_on_error:
+                NotificationService.error(
+                    (
+                        "Unable to load Supplier "
+                        "Quotations."
+                    ),
+                    title="Supplier Quotations",
+                    error=error,
+                )
+
+            return False
+
+    def refresh_supplier_quotations(self):
+        loaded = self.load_supplier_quotations(
+            notify_on_error=True
+        )
+
+        if (
+            loaded
+            and self.supplier_quotations_section
+        ):
+            self.supplier_quotations_section.set_quotations(
+                self.supplier_quotations
+            )
 
     # ============================================================
     # CLARIFICATION ACTIONS
@@ -608,7 +1281,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             return
 
         is_assigned = bool(
-            self.request.get("assigned_to")
+            self.request.get("current_assignment_id")
         )
 
         AssignmentDialog(
@@ -701,6 +1374,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
         )
 
+        self.load_supplier_quotations(
+            notify_on_error=True
+        )
+
         for widget in self.winfo_children():
             widget.destroy()
 
@@ -708,6 +1385,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.summary = None
         self.collaboration_banner = None
         self.tabview = None
+        self.supplier_quotations_section = None
 
         self.build_ui()
 

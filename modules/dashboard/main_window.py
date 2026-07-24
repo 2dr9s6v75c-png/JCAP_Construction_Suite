@@ -29,6 +29,19 @@ from modules.administration.views.user_management_view import (
     UserManagementView,
 )
 
+from modules.master_data.master_data_view import (
+    MasterDataView,
+)
+from modules.master_data.clients.client_management_view import (
+    ClientManagementView,
+)
+from modules.master_data.projects.project_management_view import (
+    ProjectManagementView,
+)
+from modules.master_data.sites.site_management_view import (
+    SiteManagementView,
+)
+
 from modules.quotation.views.clarification_details_view import (
     ClarificationDetailsView,
 )
@@ -196,6 +209,12 @@ class MainWindow(ctk.CTk):
                 "text": "Quotation Monitoring",
                 "command": self.show_quotation_module,
                 "visible": True,
+            },
+            {
+                "key": "master_data",
+                "text": "Master Data",
+                "command": self.show_master_data,
+                "visible": self.can_access_master_data(),
             },
             {
                 "key": "supplier_rfq",
@@ -882,6 +901,150 @@ class MainWindow(ctk.CTk):
                 f"Entity type: {entity_type}"
             ),
             title="Navigation Coming Soon",
+        )
+
+
+    # ============================================================
+    # MASTER DATA MODULE
+    # ============================================================
+
+    def can_access_master_data(self):
+        """
+        Allow administrators and users authorized to create
+        Material Requests to access Master Data Management.
+        """
+        return (
+            PermissionService.can_create_material_request(
+                self.user
+            )
+            or PermissionService.can_manage_users(
+                self.user
+            )
+        )
+
+    def show_master_data(self):
+        """
+        Open the Master Data Management workspace.
+        """
+        if not self.can_access_master_data():
+            NotificationService.error(
+                (
+                    "You do not have permission to access "
+                    "Master Data Management."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        self.set_active_navigation(
+            "master_data"
+        )
+
+        self.navigation.navigate(
+            MasterDataView,
+            self.user,
+            on_clients=self.show_client_management,
+            on_projects=self.show_project_management,
+            on_sites=self.show_site_management,
+        )
+
+    def show_client_management(self):
+        self.set_active_navigation(
+            "master_data"
+        )
+
+        self.navigation.navigate(
+            ClientManagementView,
+            self.user,
+            on_back=self.show_master_data,
+        )
+
+    def show_project_management(self):
+        self.set_active_navigation(
+            "master_data"
+        )
+
+        self.navigation.navigate(
+            ProjectManagementView,
+            self.user,
+            on_back=self.show_master_data,
+        )
+
+    def show_site_management(self):
+        self.set_active_navigation(
+            "master_data"
+        )
+
+        self.navigation.navigate(
+            SiteManagementView,
+            self.user,
+            on_back=self.show_master_data,
+        )
+
+    def show_master_data_placeholder(
+        self,
+        *,
+        title,
+        description,
+    ):
+        self.set_active_navigation(
+            "master_data"
+        )
+
+        self.clear_workspace()
+
+        frame = ctk.CTkFrame(
+            self.workspace,
+            fg_color=JCAPTheme.CARD_BG,
+            corner_radius=14,
+        )
+
+        frame.pack(
+            fill="both",
+            expand=True,
+            padx=20,
+            pady=20,
+        )
+
+        ctk.CTkLabel(
+            frame,
+            text=title,
+            font=("Segoe UI", 28, "bold"),
+            text_color=JCAPTheme.DARK_BLUE,
+        ).pack(
+            pady=(100, 10),
+        )
+
+        ctk.CTkLabel(
+            frame,
+            text=description,
+            font=("Segoe UI", 15),
+            text_color=JCAPTheme.TEXT_MUTED,
+            wraplength=650,
+            justify="center",
+        ).pack()
+
+        ctk.CTkLabel(
+            frame,
+            text=(
+                "This management screen will be "
+                "implemented next."
+            ),
+            font=("Segoe UI", 13),
+            text_color=JCAPTheme.TEXT_MUTED,
+        ).pack(
+            pady=(12, 0),
+        )
+
+        ctk.CTkButton(
+            frame,
+            text="Back to Master Data",
+            width=190,
+            fg_color=JCAPTheme.PRIMARY_BLUE,
+            hover_color=JCAPTheme.DARK_BLUE,
+            command=self.show_master_data,
+        ).pack(
+            pady=25,
         )
 
     # ============================================================

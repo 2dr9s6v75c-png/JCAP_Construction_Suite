@@ -418,7 +418,7 @@ class QuotationView(ctk.CTkFrame):
                 ),
                 str(
                     request.get(
-                        "assigned_to",
+                        "assigned_to_name",
                         "",
                     )
                 ),
@@ -590,7 +590,10 @@ class QuotationView(ctk.CTkFrame):
             content,
             3,
             "Assigned To:",
-            request["assigned_to"],
+            (
+                request.get("assigned_to_name")
+                or "Unassigned"
+            ),
         )
 
         self.add_info_row(

@@ -1,35 +1,8 @@
 """
 Material Request Repository.
 
-Purpose:
-    Provide PostgreSQL persistence operations for material-request records.
-
-Responsibilities:
-    - Retrieve material-request records.
-    - Update assignment linkage and assignee context.
-    - Clear assignment linkage and assignee context.
-    - Persist material-request workflow status.
-    - Map raw PostgreSQL rows into dictionaries.
-    - Support standalone operations and shared transactions.
-
-Restrictions:
-    - No assignment-history persistence.
-    - No permission validation.
-    - No workflow-transition validation.
-    - No notifications.
-    - No activity logging.
-    - No UI logic.
-    - No business-process coordination.
-
-Engineering standards:
-    ES-001 - Repository Isolation
-    ES-002 - No Magic Strings
-    ES-007 - UUID Everywhere
-    ES-009 - Stable Public APIs
-    ES-011 - SQL Constants
-    ES-012 - Centralized Row Mapping
-    ES-014 - Repository Template Standard
-    ES-020 - Database Ownership
+Persists Material Request records and keeps the legacy display status aligned
+with the newer workflow status during assignment operations.
 """
 
 from typing import Any
@@ -77,6 +50,7 @@ SET
     current_assignment_id = %s,
     assigned_to = %s,
     workflow_status = %s,
+    status = %s,
     updated_at = CURRENT_TIMESTAMP
 WHERE material_request.id = %s
 RETURNING
@@ -90,6 +64,7 @@ SET
     current_assignment_id = NULL,
     assigned_to = NULL,
     workflow_status = %s,
+    status = %s,
     updated_at = CURRENT_TIMESTAMP
 WHERE material_request.id = %s
 RETURNING
@@ -101,6 +76,7 @@ _UPDATE_WORKFLOW_STATUS_SQL = f"""
 UPDATE quotation.material_requests AS material_request
 SET
     workflow_status = %s,
+    status = %s,
     updated_at = CURRENT_TIMESTAMP
 WHERE material_request.id = %s
 RETURNING
@@ -109,12 +85,7 @@ RETURNING
 
 
 class MaterialRequestRepository(BaseRepository):
-    """
-    PostgreSQL repository for material requests.
-
-    When cursor is supplied, the caller owns commit and rollback.
-    When cursor is not supplied, BaseRepository owns the transaction.
-    """
+    """PostgreSQL repository for Material Request records."""
 
     @staticmethod
     def _map_material_request_row(
@@ -147,6 +118,14 @@ class MaterialRequestRepository(BaseRepository):
             "current_assignment_id": row[20],
         }
 
+    @staticmethod
+    def _status_value(status: Any) -> str:
+        return (
+            status.value
+            if hasattr(status, "value")
+            else str(status)
+        )
+
     @classmethod
     def get_by_id(
         cls,
@@ -166,20 +145,24 @@ class MaterialRequestRepository(BaseRepository):
         cls,
         material_request_id: UUID,
         assignment_id: UUID,
-        assigned_to: str,
-        workflow_status: str,
+        assigned_to: UUID | str,
+        workflow_status: Any,
         *,
         cursor=None,
     ) -> dict[str, Any] | None:
         """
-        Atomically update current assignment, assignee, and workflow status.
+        Update the assignment pointer, assignee, workflow status, and the
+        legacy status used by the current Quotation Monitoring UI.
         """
+        status_value = cls._status_value(workflow_status)
+
         row = cls.execute_returning(
             _UPDATE_ASSIGNMENT_CONTEXT_SQL,
             (
                 assignment_id,
-                assigned_to,
-                workflow_status,
+                str(assigned_to),
+                status_value,
+                status_value,
                 material_request_id,
             ),
             cursor=cursor,
@@ -190,17 +173,17 @@ class MaterialRequestRepository(BaseRepository):
     def clear_assignment_context(
         cls,
         material_request_id: UUID,
-        workflow_status: str,
+        workflow_status: Any,
         *,
         cursor=None,
     ) -> dict[str, Any] | None:
-        """
-        Clear current assignment and assignee, then set workflow status.
-        """
+        status_value = cls._status_value(workflow_status)
+
         row = cls.execute_returning(
             _CLEAR_ASSIGNMENT_CONTEXT_SQL,
             (
-                workflow_status,
+                status_value,
+                status_value,
                 material_request_id,
             ),
             cursor=cursor,
@@ -211,17 +194,17 @@ class MaterialRequestRepository(BaseRepository):
     def update_workflow_status(
         cls,
         material_request_id: UUID,
-        workflow_status: str,
+        workflow_status: Any,
         *,
         cursor=None,
     ) -> dict[str, Any] | None:
-        """
-        Update workflow_status without changing lifecycle status.
-        """
+        status_value = cls._status_value(workflow_status)
+
         row = cls.execute_returning(
             _UPDATE_WORKFLOW_STATUS_SQL,
             (
-                workflow_status,
+                status_value,
+                status_value,
                 material_request_id,
             ),
             cursor=cursor,

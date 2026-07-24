@@ -19,7 +19,6 @@ from core.services.base_service import BaseService
 from core.workflow.material_request_workflow import AssignmentState
 from modules.quotation.constants.assignment_constants import (
     DEFAULT_ASSIGNMENT_REMARKS,
-    MAX_ACTIVE_ASSIGNMENTS,
     MAX_ASSIGNMENT_REMARK_LENGTH,
 )
 from modules.quotation.repositories.material_request_assignment_repository import (
@@ -164,11 +163,6 @@ class MaterialRequestAssignmentService(BaseService):
             use_default=True,
         )
 
-        self._validate_officer_workload(
-            assigned_to,
-            cursor=cursor,
-        )
-
         return self._repository.create_assignment(
             material_request_id=material_request_id,
             assigned_to=assigned_to,
@@ -279,16 +273,8 @@ class MaterialRequestAssignmentService(BaseService):
         *,
         cursor=None,
     ) -> None:
-        workload = self.get_officer_workload(
-            officer_id,
-            cursor=cursor,
-        )
-
-        if workload >= MAX_ACTIVE_ASSIGNMENTS:
-            raise ValueError(
-                "The selected purchasing officer has reached the "
-                "maximum number of active assignments."
-            )
+        """Phase 1: workload limit disabled."""
+        return
 
     @staticmethod
     def _require_active_assignment(
