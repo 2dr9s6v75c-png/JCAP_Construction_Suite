@@ -17,6 +17,10 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
+from modules.quotation.components.supplier_quotation_file_panel import (
+    SupplierQuotationFilePanel,
+)
+
 
 class SupplierQuotationsTab(ctk.CTkFrame):
     """Display Supplier Quotations associated with one Material Request."""
@@ -46,6 +50,10 @@ class SupplierQuotationsTab(ctk.CTkFrame):
         on_archive: Callable[[dict[str, Any]], None] | None = None,
         on_restore: Callable[[dict[str, Any]], None] | None = None,
         on_refresh: Callable[[], None] | None = None,
+        current_user: dict[str, Any] | None = None,
+        quotation_process=None,
+        material_request_archived: bool = False,
+        can_manage_files: bool | None = None,
     ) -> None:
         super().__init__(
             parent,
@@ -74,6 +82,17 @@ class SupplierQuotationsTab(ctk.CTkFrame):
         self.on_restore = on_restore
         self.on_refresh = on_refresh
 
+        self.current_user = current_user or {}
+        self.quotation_process = quotation_process
+        self.material_request_archived = bool(
+            material_request_archived
+        )
+        self.can_manage_files = (
+            self.can_edit
+            if can_manage_files is None
+            else bool(can_manage_files)
+        )
+
         self.selected_quotation: dict[str, Any] | None = None
         self._row_frames: list[ctk.CTkFrame] = []
 
@@ -85,6 +104,7 @@ class SupplierQuotationsTab(ctk.CTkFrame):
         self._restore_button = None
         self._list_frame = None
         self._empty_state = None
+        self._file_panel = None
 
         self._build_ui()
         self.set_quotations(self.quotations)
@@ -95,13 +115,79 @@ class SupplierQuotationsTab(ctk.CTkFrame):
 
     def _build_ui(self) -> None:
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(1, weight=1)
 
         self._build_toolbar()
-        self._build_filters()
-        self._build_column_header()
-        self._build_list()
-        self._build_action_bar()
+        self._build_workspace()
+
+    def _build_workspace(self) -> None:
+        workspace = ctk.CTkFrame(
+            self,
+            fg_color="#FFFFFF",
+            corner_radius=12,
+        )
+        workspace.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=14,
+            pady=(0, 14),
+        )
+        workspace.grid_columnconfigure(0, weight=42, uniform="quotation")
+        workspace.grid_columnconfigure(1, weight=58, uniform="quotation")
+        workspace.grid_rowconfigure(0, weight=1)
+
+        list_side = ctk.CTkFrame(
+            workspace,
+            fg_color="transparent",
+            corner_radius=0,
+        )
+        list_side.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=(14, 5),
+            pady=14,
+        )
+        list_side.grid_columnconfigure(0, weight=1)
+        list_side.grid_rowconfigure(2, weight=1)
+
+        self._build_filters(parent=list_side, row=0)
+        self._build_column_header(parent=list_side, row=1)
+        self._build_list(parent=list_side, row=2)
+        self._build_action_bar(parent=list_side, row=3)
+
+        divider = ctk.CTkFrame(
+            workspace,
+            width=1,
+            fg_color="#E5E7EB",
+            corner_radius=0,
+        )
+        divider.grid(
+            row=0,
+            column=0,
+            sticky="nse",
+            padx=(0, 0),
+            pady=14,
+        )
+
+        self._file_panel = SupplierQuotationFilePanel(
+            workspace,
+            current_user=self.current_user,
+            quotation_process=self.quotation_process,
+            can_manage=self.can_manage_files,
+            material_request_archived=(
+                self.material_request_archived
+            ),
+            on_files_changed=self._handle_files_changed,
+        )
+        self._file_panel.grid(
+            row=0,
+            column=1,
+            sticky="nsew",
+            padx=(5, 14),
+            pady=14,
+        )
 
     def _build_toolbar(self) -> None:
         toolbar = ctk.CTkFrame(
@@ -114,7 +200,7 @@ class SupplierQuotationsTab(ctk.CTkFrame):
             column=0,
             sticky="ew",
             padx=14,
-            pady=(14, 8),
+            pady=(8, 8),
         )
         toolbar.grid_columnconfigure(0, weight=1)
 
@@ -126,8 +212,8 @@ class SupplierQuotationsTab(ctk.CTkFrame):
             row=0,
             column=0,
             sticky="w",
-            padx=16,
-            pady=14,
+            padx=18,
+            pady=10,
         )
 
         ctk.CTkLabel(
@@ -158,15 +244,15 @@ class SupplierQuotationsTab(ctk.CTkFrame):
             row=0,
             column=1,
             sticky="e",
-            padx=16,
-            pady=14,
+            padx=18,
+            pady=10,
         )
 
         ctk.CTkButton(
             button_group,
             text="Refresh",
             width=92,
-            height=34,
+            height=32,
             fg_color="#E3F2FD",
             hover_color="#BBDEFB",
             text_color="#0D47A1",
@@ -177,46 +263,41 @@ class SupplierQuotationsTab(ctk.CTkFrame):
             button_group,
             text="+ Add Quotation",
             width=132,
-            height=34,
+            height=32,
             fg_color="#0D47A1",
             hover_color="#0A2E63",
             state=("normal" if self.can_add else "disabled"),
             command=self._handle_add,
         ).pack(side="left")
 
-    def _build_filters(self) -> None:
+    def _build_filters(self, parent, row: int) -> None:
         filters = ctk.CTkFrame(
-            self,
-            fg_color="#FFFFFF",
-            corner_radius=12,
+            parent,
+            fg_color="transparent",
+            corner_radius=0,
         )
         filters.grid(
-            row=1,
+            row=row,
             column=0,
             sticky="ew",
-            padx=14,
-            pady=(0, 8),
+            pady=(0, 5),
         )
-
-        filters.grid_columnconfigure(0, weight=3)
-        filters.grid_columnconfigure(1, weight=2)
+        filters.grid_columnconfigure(0, weight=5)
+        filters.grid_columnconfigure(1, weight=3)
         filters.grid_columnconfigure(2, weight=2)
         filters.grid_columnconfigure(3, weight=2)
 
         search_entry = ctk.CTkEntry(
             filters,
             textvariable=self.search_var,
-            placeholder_text=(
-                "Search supplier, reference, status, or remarks"
-            ),
-            height=36,
+            placeholder_text="Search supplier or reference...",
+            height=32,
         )
         search_entry.grid(
             row=0,
             column=0,
             sticky="ew",
-            padx=(14, 6),
-            pady=12,
+            padx=(0, 5),
         )
         search_entry.bind(
             "<KeyRelease>",
@@ -238,29 +319,27 @@ class SupplierQuotationsTab(ctk.CTkFrame):
             filters,
             variable=self.status_filter_var,
             values=status_values,
-            height=36,
+            height=32,
             command=lambda _value: self.apply_filters(),
         )
         status_menu.grid(
             row=0,
             column=1,
             sticky="ew",
-            padx=6,
-            pady=12,
+            padx=5,
         )
 
         date_from_entry = ctk.CTkEntry(
             filters,
             textvariable=self.date_from_var,
-            placeholder_text="From YYYY-MM-DD",
-            height=36,
+            placeholder_text="From date",
+            height=34,
         )
         date_from_entry.grid(
             row=0,
             column=2,
             sticky="ew",
-            padx=6,
-            pady=12,
+            padx=5,
         )
         date_from_entry.bind(
             "<Return>",
@@ -270,64 +349,31 @@ class SupplierQuotationsTab(ctk.CTkFrame):
         date_to_entry = ctk.CTkEntry(
             filters,
             textvariable=self.date_to_var,
-            placeholder_text="To YYYY-MM-DD",
-            height=36,
+            placeholder_text="To date",
+            height=34,
         )
         date_to_entry.grid(
             row=0,
             column=3,
             sticky="ew",
-            padx=6,
-            pady=12,
+            padx=(5, 0),
         )
         date_to_entry.bind(
             "<Return>",
             lambda _event: self.apply_filters(),
         )
 
-        button_group = ctk.CTkFrame(
-            filters,
-            fg_color="transparent",
-        )
-        button_group.grid(
-            row=0,
-            column=4,
-            sticky="e",
-            padx=(6, 14),
-            pady=12,
-        )
-
-        ctk.CTkButton(
-            button_group,
-            text="Apply",
-            width=74,
-            height=36,
-            command=self.apply_filters,
-        ).pack(side="left", padx=(0, 6))
-
-        ctk.CTkButton(
-            button_group,
-            text="Clear",
-            width=74,
-            height=36,
-            fg_color="#ECEFF1",
-            hover_color="#CFD8DC",
-            text_color="#455A64",
-            command=self.clear_filters,
-        ).pack(side="left")
-
-    def _build_column_header(self) -> None:
+    def _build_column_header(self, parent, row: int) -> None:
         header = ctk.CTkFrame(
-            self,
+            parent,
             fg_color="#EAF0F6",
             corner_radius=8,
         )
         header.grid(
-            row=2,
+            row=row,
             column=0,
             sticky="ew",
-            padx=14,
-            pady=(0, 4),
+            pady=(0, 6),
         )
 
         column_weights = (3, 2, 2, 2, 1)
@@ -360,17 +406,16 @@ class SupplierQuotationsTab(ctk.CTkFrame):
                 pady=9,
             )
 
-    def _build_list(self) -> None:
+    def _build_list(self, parent, row: int) -> None:
         container = ctk.CTkFrame(
-            self,
+            parent,
             fg_color="#FFFFFF",
             corner_radius=12,
         )
         container.grid(
-            row=3,
+            row=row,
             column=0,
             sticky="nsew",
-            padx=14,
             pady=(0, 8),
         )
         container.grid_columnconfigure(0, weight=1)
@@ -400,24 +445,24 @@ class SupplierQuotationsTab(ctk.CTkFrame):
             font=ctk.CTkFont(size=13),
         )
 
-    def _build_action_bar(self) -> None:
+    def _build_action_bar(self, parent, row: int) -> None:
         action_bar = ctk.CTkFrame(
-            self,
+            parent,
             fg_color="#FFFFFF",
             corner_radius=12,
         )
         action_bar.grid(
-            row=4,
+            row=row,
             column=0,
             sticky="ew",
-            padx=14,
-            pady=(0, 14),
+            pady=(0, 0),
         )
         action_bar.grid_columnconfigure(0, weight=1)
 
         self._selection_label = ctk.CTkLabel(
             action_bar,
             text="Select a quotation to enable actions.",
+            wraplength=300,
             anchor="w",
             text_color="#607D8B",
             font=ctk.CTkFont(size=12),
@@ -426,8 +471,8 @@ class SupplierQuotationsTab(ctk.CTkFrame):
             row=0,
             column=0,
             sticky="ew",
-            padx=16,
-            pady=12,
+            padx=(14, 8),
+            pady=10,
         )
 
         buttons = ctk.CTkFrame(
@@ -438,8 +483,8 @@ class SupplierQuotationsTab(ctk.CTkFrame):
             row=0,
             column=1,
             sticky="e",
-            padx=16,
-            pady=10,
+            padx=(8, 12),
+            pady=8,
         )
 
         self._open_button = self._make_action_button(
@@ -501,6 +546,13 @@ class SupplierQuotationsTab(ctk.CTkFrame):
     ) -> None:
         self.quotations = list(quotations or [])
         self.selected_quotation = None
+
+        if self._file_panel is not None:
+            self._file_panel.set_quotation(
+                None,
+                refresh=False,
+            )
+
         self.apply_filters()
 
     def _render_rows(self) -> None:
@@ -780,6 +832,13 @@ class SupplierQuotationsTab(ctk.CTkFrame):
 
         self.filtered_quotations = filtered
         self.selected_quotation = None
+
+        if self._file_panel is not None:
+            self._file_panel.set_quotation(
+                None,
+                refresh=False,
+            )
+
         self._render_rows()
         self._update_action_states()
 
@@ -834,6 +893,12 @@ class SupplierQuotationsTab(ctk.CTkFrame):
         self.selected_quotation = quotation
         self._highlight_selected_row()
         self._update_action_states()
+
+        if self._file_panel is not None:
+            self._file_panel.set_quotation(
+                quotation,
+                refresh=True,
+            )
 
     def _highlight_selected_row(self) -> None:
         selected_id = (
@@ -996,6 +1061,33 @@ class SupplierQuotationsTab(ctk.CTkFrame):
 
         if self.on_open:
             self.on_open(quotation)
+
+    def _handle_files_changed(
+        self,
+        quotation: dict[str, Any],
+        files: list[dict[str, Any]],
+    ) -> None:
+        quotation_id = quotation.get("id")
+        file_count = len(files or [])
+
+        for record in self.quotations:
+            if record.get("id") == quotation_id:
+                record["file_count"] = file_count
+                break
+
+        for record in self.filtered_quotations:
+            if record.get("id") == quotation_id:
+                record["file_count"] = file_count
+                break
+
+        self._render_rows()
+        self._highlight_selected_row()
+
+    def refresh_selected_files(self) -> None:
+        if self._file_panel is not None:
+            self._file_panel.refresh_files(
+                notify_on_error=True,
+            )
 
     # ========================================================
     # FORMATTING

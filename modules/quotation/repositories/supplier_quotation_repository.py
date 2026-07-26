@@ -36,6 +36,22 @@ _SUPPLIER_QUOTATION_COLUMNS = """
 """
 
 
+_SUPPLIER_QUOTATION_RETURNING_COLUMNS = """
+    id,
+    material_request_id,
+    supplier_name,
+    quotation_reference,
+    quotation_date,
+    remarks,
+    status,
+    is_archived,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+"""
+
+
 _SUPPLIER_QUOTATION_FILE_COLUMNS = """
     quotation_file.id,
     quotation_file.supplier_quotation_id,
@@ -46,6 +62,19 @@ _SUPPLIER_QUOTATION_FILE_COLUMNS = """
     quotation_file.file_size,
     quotation_file.uploaded_at,
     quotation_file.uploaded_by
+"""
+
+
+_SUPPLIER_QUOTATION_FILE_RETURNING_COLUMNS = """
+    id,
+    supplier_quotation_id,
+    original_filename,
+    stored_filename,
+    folder_path,
+    file_extension,
+    file_size,
+    uploaded_at,
+    uploaded_by
 """
 
 
@@ -62,7 +91,7 @@ INSERT INTO quotation.supplier_quotations (
 )
 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
 RETURNING
-    {_SUPPLIER_QUOTATION_COLUMNS};
+    {_SUPPLIER_QUOTATION_RETURNING_COLUMNS};
 """
 
 
@@ -261,7 +290,7 @@ INSERT INTO quotation.supplier_quotation_files (
 )
 VALUES (%s, %s, %s, %s, %s, %s, %s)
 RETURNING
-    {_SUPPLIER_QUOTATION_FILE_COLUMNS};
+    {_SUPPLIER_QUOTATION_FILE_RETURNING_COLUMNS};
 """
 
 

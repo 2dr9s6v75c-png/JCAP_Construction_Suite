@@ -1,7 +1,6 @@
 from datetime import date, datetime
 import os
 from pathlib import Path
-import subprocess
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -29,6 +28,9 @@ from modules.quotation.sections.supplier_quotations_tab import (
 )
 from modules.quotation.processes.material_request_assignment_process import (
     MaterialRequestAssignmentProcess,
+)
+from modules.quotation.processes.material_request_attachment_process import (
+    MaterialRequestAttachmentProcess,
 )
 from modules.quotation.sections.activity_tab import ActivityTab
 from modules.quotation.sections.attachments_tab import AttachmentsTab
@@ -96,6 +98,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
         self.supplier_quotation_process = (
             SupplierQuotationProcess()
+        )
+
+        self.attachment_process = (
+            MaterialRequestAttachmentProcess()
         )
 
         self.supplier_quotations = []
@@ -440,20 +446,13 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         )
 
     def build_attachments_tab(self, parent):
-        attachments = (
-            self.request.get(
-                "attachments",
-                [],
-            )
-            if self.request
-            else []
-        )
-
         section = AttachmentsTab(
             parent,
-            attachments=attachments,
-            on_open=self.open_attachment,
-            on_show_folder=self.show_attachment_folder,
+            material_request_id=self.material_request_id,
+            current_user=self.user,
+            is_archived=self.is_archived(),
+            attachment_process=self.attachment_process,
+            on_data_changed=self.handle_attachment_data_changed,
         )
 
         section.grid(
@@ -514,6 +513,16 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 on_archive=self.archive_supplier_quotation,
                 on_restore=self.restore_supplier_quotation,
                 on_refresh=self.refresh_supplier_quotations,
+                current_user=self.user,
+                quotation_process=self.supplier_quotation_process,
+                material_request_archived=self.is_archived(),
+                can_manage_files=(
+                    not self.is_archived()
+                    and PermissionService
+                    .can_manage_supplier_quotations(
+                        self.user
+                    )
+                ),
             )
         )
 
@@ -590,6 +599,19 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             0,
             weight=1,
         )
+
+    def handle_attachment_data_changed(
+        self,
+        attachments,
+    ):
+        if not self.request:
+            return
+
+        self.request["attachments"] = attachments or []
+
+        if self.summary:
+            self.summary.destroy()
+            self.build_summary()
 
     # ============================================================
     # SUPPLIER QUOTATION ACTIONS
@@ -818,13 +840,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 return
 
             first_file = valid_paths[0]
+            quotation_folder = first_file.parent
 
-            subprocess.Popen(
-                [
-                    "explorer",
-                    f"/select,{first_file}",
-                ]
-            )
+            os.startfile(str(quotation_folder))
 
             NotificationService.info(
                 (

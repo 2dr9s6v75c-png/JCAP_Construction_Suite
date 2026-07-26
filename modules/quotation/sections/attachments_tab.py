@@ -7,9 +7,12 @@ class AttachmentsTab(ctk.CTkFrame):
     def __init__(
         self,
         parent,
-        attachments=None,
-        on_open=None,
-        on_show_folder=None,
+        *,
+        material_request_id,
+        current_user,
+        is_archived=False,
+        attachment_process=None,
+        on_data_changed=None,
     ):
         super().__init__(
             parent,
@@ -17,9 +20,11 @@ class AttachmentsTab(ctk.CTkFrame):
             corner_radius=0,
         )
 
-        self.attachments = attachments or []
-        self.on_open = on_open
-        self.on_show_folder = on_show_folder
+        self.material_request_id = material_request_id
+        self.current_user = current_user
+        self.is_archived = bool(is_archived)
+        self.attachment_process = attachment_process
+        self.on_data_changed = on_data_changed
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -29,9 +34,11 @@ class AttachmentsTab(ctk.CTkFrame):
     def build_ui(self):
         self.panel = AttachmentPanel(
             self,
-            attachments=self.attachments,
-            on_open=self.on_open,
-            on_show_folder=self.on_show_folder,
+            material_request_id=self.material_request_id,
+            current_user=self.current_user,
+            is_archived=self.is_archived,
+            attachment_process=self.attachment_process,
+            on_data_changed=self.on_data_changed,
         )
 
         self.panel.grid(
