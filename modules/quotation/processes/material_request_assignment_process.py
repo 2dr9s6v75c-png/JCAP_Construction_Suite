@@ -17,6 +17,10 @@ from typing import Any
 from uuid import UUID
 
 from core.database.transaction_manager import TransactionManager
+from core.notifications.persistent_notification_service import (
+    PersistentNotificationService,
+)
+from core.organization.organization_service import OrganizationService
 from core.workflow.material_request_workflow import MaterialRequestState
 from modules.quotation.repositories.material_request_repository import (
     MaterialRequestRepository,
@@ -67,8 +71,8 @@ class MaterialRequestAssignmentProcess:
                 When the current user cannot assign Material Requests.
 
             Exception:
-                Any service, repository, or database error. The transaction
-                manager rolls the complete operation back.
+                Any service, repository, notification, or database error. The
+                transaction manager rolls the complete operation back.
         """
         with self._transaction_factory() as cursor:
             material_request = self._material_request_repository.get_by_id(
@@ -78,6 +82,13 @@ class MaterialRequestAssignmentProcess:
 
             if material_request is None:
                 raise ValueError("Material Request not found.")
+
+            mr_number = material_request.get("mr_number")
+
+            if not mr_number:
+                raise ValueError(
+                    "Material Request number is unavailable."
+                )
 
             assignment_id = self._assignment_service.assign(
                 material_request_id=material_request_id,
@@ -100,6 +111,37 @@ class MaterialRequestAssignmentProcess:
             if updated_material_request is None:
                 raise ValueError(
                     "Material Request assignment context could not be updated."
+                )
+
+            PersistentNotificationService.notify_material_request_assigned(
+                recipient_user_id=assigned_to,
+                material_request_id=material_request_id,
+                mr_number=mr_number,
+                assigned_by=current_user.get("id"),
+                cursor=cursor,
+            )
+
+            requester_user_id = material_request.get(
+                "requested_by_user_id"
+            )
+            purchasing_officer = OrganizationService.get_user(
+                assigned_to
+            )
+
+            if requester_user_id and purchasing_officer:
+                purchasing_officer_name = (
+                    purchasing_officer.get("full_name")
+                    or purchasing_officer.get("username")
+                    or "the assigned Purchasing Officer"
+                )
+
+                PersistentNotificationService.notify_requester_material_request_assigned(
+                    recipient_user_id=requester_user_id,
+                    material_request_id=material_request_id,
+                    mr_number=mr_number,
+                    purchasing_officer_name=purchasing_officer_name,
+                    assigned_by=current_user.get("id"),
+                    cursor=cursor,
                 )
 
             return {
@@ -145,6 +187,21 @@ class MaterialRequestAssignmentProcess:
                     "Reassigned assignment has no Material Request ID."
                 )
 
+            material_request = self._material_request_repository.get_by_id(
+                material_request_id,
+                cursor=cursor,
+            )
+
+            if material_request is None:
+                raise ValueError("Material Request not found.")
+
+            mr_number = material_request.get("mr_number")
+
+            if not mr_number:
+                raise ValueError(
+                    "Material Request number is unavailable."
+                )
+
             replacement_assignment_id = self._assignment_service.assign(
                 material_request_id=material_request_id,
                 assigned_to=assigned_to,
@@ -166,6 +223,37 @@ class MaterialRequestAssignmentProcess:
             if updated_material_request is None:
                 raise ValueError(
                     "Material Request assignment context could not be updated."
+                )
+
+            PersistentNotificationService.notify_material_request_reassigned(
+                recipient_user_id=assigned_to,
+                material_request_id=material_request_id,
+                mr_number=mr_number,
+                reassigned_by=current_user.get("id"),
+                cursor=cursor,
+            )
+
+            requester_user_id = material_request.get(
+                "requested_by_user_id"
+            )
+            purchasing_officer = OrganizationService.get_user(
+                assigned_to
+            )
+
+            if requester_user_id and purchasing_officer:
+                purchasing_officer_name = (
+                    purchasing_officer.get("full_name")
+                    or purchasing_officer.get("username")
+                    or "the newly assigned Purchasing Officer"
+                )
+
+                PersistentNotificationService.notify_requester_material_request_reassigned(
+                    recipient_user_id=requester_user_id,
+                    material_request_id=material_request_id,
+                    mr_number=mr_number,
+                    purchasing_officer_name=purchasing_officer_name,
+                    reassigned_by=current_user.get("id"),
+                    cursor=cursor,
                 )
 
             return {

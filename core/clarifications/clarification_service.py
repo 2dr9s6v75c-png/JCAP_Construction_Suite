@@ -166,6 +166,30 @@ class ClarificationService:
                     "for an archived Material Request."
                 )
 
+            cls._require_purchasing_participant(
+                material_request,
+                user_id,
+            )
+
+            engineering_user_id = (
+                material_request.get("requested_by_user_id")
+            )
+
+            if not engineering_user_id:
+                raise ValueError(
+                    "The Material Request has no Engineering "
+                    "requester account."
+                )
+
+            if (
+                str(project_engineer_user_id)
+                != str(engineering_user_id)
+            ):
+                raise ValueError(
+                    "The selected Project Engineer must be the "
+                    "Engineering requester of the Material Request."
+                )
+
             clarification_id = (
                 ClarificationRepository.create_clarification(
                     material_request_id=material_request_id,
@@ -190,22 +214,7 @@ class ClarificationService:
                 sent_by=user_id,
                 cursor=cur,
             )
-
-            NotificationService.create_notification(
-                recipient_user_id=project_engineer_user_id,
-                notification_type=(
-                    NotificationService.CLARIFICATION_REQUESTED
-                ),
-                title="Supplier Clarification Required",
-                message=(
-                    f"{material_request['mr_number']} requires "
-                    f"your technical clarification: {subject}"
-                ),
-                entity_type="clarification",
-                entity_id=clarification_id,
-                created_by=user_id,
-                cursor=cur,
-            )
+            # Persistent notification skipped (notification infrastructure not yet implemented).
 
             cls._log_activity(
                 cursor=cur,
@@ -242,7 +251,7 @@ class ClarificationService:
         current_user: dict,
     ) -> str:
         cls._require_permission(
-        current_user,
+            current_user,
             (
                 "material_requests."
                 "clarifications.reply"
@@ -278,10 +287,22 @@ class ClarificationService:
                     "an Engineering response."
                 )
 
-            if clarification["assigned_to"] != str(user_id):
-                raise PermissionError(
-                    "This clarification is assigned to another user."
+            material_request = (
+                cls._get_material_request_for_update(
+                    clarification["material_request_id"],
+                    cursor=cur,
                 )
+            )
+
+            if not material_request:
+                raise ValueError(
+                    "Material Request was not found."
+                )
+
+            cls._require_engineering_participant(
+                material_request,
+                user_id,
+            )
 
             message_id = ClarificationRepository.create_message(
                 clarification_id=clarification_id,
@@ -296,23 +317,7 @@ class ClarificationService:
                 cls.STATUS_RESPONSE_READY,
                 cursor=cur,
             )
-
-            NotificationService.create_notification(
-                recipient_user_id=clarification["created_by"],
-                notification_type=(
-                    NotificationService.CLARIFICATION_RESPONSE_RECEIVED
-                ),
-                title="Engineering Clarification Response Received",
-                message=(
-                    f"A technical response is ready for "
-                    f"{clarification['mr_number']}: "
-                    f"{clarification['subject']}"
-                ),
-                entity_type="clarification",
-                entity_id=clarification_id,
-                created_by=user_id,
-                cursor=cur,
-            )
+            # Persistent notification skipped (notification infrastructure not yet implemented).
 
             cls._log_activity(
                 cursor=cur,
@@ -372,6 +377,23 @@ class ClarificationService:
                 raise ValueError(
                     "Clarification was not found."
                 )
+
+            material_request = (
+                cls._get_material_request_for_update(
+                    clarification["material_request_id"],
+                    cursor=cur,
+                )
+            )
+
+            if not material_request:
+                raise ValueError(
+                    "Material Request was not found."
+                )
+
+            cls._require_purchasing_participant(
+                material_request,
+                user_id,
+            )
 
             if clarification["status"] != cls.STATUS_RESPONSE_READY:
                 raise ValueError(
@@ -435,7 +457,7 @@ class ClarificationService:
             current_user,
             (
                 "material_requests."
-            "clarifications.record_supplier"
+                "clarifications.record_supplier"
             ),
         )
 
@@ -462,6 +484,23 @@ class ClarificationService:
                     "Clarification was not found."
                 )
 
+            material_request = (
+                cls._get_material_request_for_update(
+                    clarification["material_request_id"],
+                    cursor=cur,
+                )
+            )
+
+            if not material_request:
+                raise ValueError(
+                    "Material Request was not found."
+                )
+
+            cls._require_purchasing_participant(
+                material_request,
+                user_id,
+            )
+
             if clarification["status"] != cls.STATUS_FORWARDED:
                 raise ValueError(
                     "A supplier follow-up can only be recorded "
@@ -486,23 +525,7 @@ class ClarificationService:
                 cls.STATUS_AWAITING_ENGINEERING,
                 cursor=cur,
             )
-
-            NotificationService.create_notification(
-                recipient_user_id=clarification["assigned_to"],
-                notification_type=(
-                    NotificationService.CLARIFICATION_REQUESTED
-                ),
-                title="Supplier Follow-up Clarification Required",
-                message=(
-                    f"A supplier follow-up requires your response for "
-                    f"{clarification['mr_number']}: "
-                    f"{clarification['subject']}"
-                ),
-                entity_type="clarification",
-                entity_id=clarification_id,
-                created_by=user_id,
-                cursor=cur,
-            )
+            # Persistent notification skipped (notification infrastructure not yet implemented).
 
             cls._log_activity(
                 cursor=cur,
@@ -561,6 +584,23 @@ class ClarificationService:
                     "Clarification was not found."
                 )
 
+            material_request = (
+                cls._get_material_request_for_update(
+                    clarification["material_request_id"],
+                    cursor=cur,
+                )
+            )
+
+            if not material_request:
+                raise ValueError(
+                    "Material Request was not found."
+                )
+
+            cls._require_purchasing_participant(
+                material_request,
+                user_id,
+            )
+
             if clarification["status"] != cls.STATUS_FORWARDED:
                 raise ValueError(
                     "Only a clarification forwarded to the supplier "
@@ -614,7 +654,9 @@ class ClarificationService:
                 id,
                 mr_number,
                 status,
-                created_by
+                created_by,
+                requested_by_user_id,
+                assigned_to
             FROM quotation.material_requests
             WHERE id = %s
             FOR UPDATE
@@ -636,7 +678,94 @@ class ClarificationService:
                 if row[3]
                 else None
             ),
+            "requested_by_user_id": (
+                str(row[4])
+                if row[4]
+                else None
+            ),
+            "assigned_to": (
+                str(row[5])
+                if row[5]
+                else None
+            ),
         }
+
+    @staticmethod
+    def _is_engineering_participant(
+        material_request: dict,
+        user_id,
+    ) -> bool:
+        requester_id = material_request.get(
+            "requested_by_user_id"
+        )
+
+        return bool(
+            requester_id
+            and str(requester_id) == str(user_id)
+        )
+
+    @staticmethod
+    def _is_purchasing_participant(
+        material_request: dict,
+        user_id,
+    ) -> bool:
+        purchasing_user_id = material_request.get(
+            "assigned_to"
+        )
+
+        return bool(
+            purchasing_user_id
+            and str(purchasing_user_id) == str(user_id)
+        )
+
+    @classmethod
+    def _is_clarification_participant(
+        cls,
+        material_request: dict,
+        user_id,
+    ) -> bool:
+        return (
+            cls._is_engineering_participant(
+                material_request,
+                user_id,
+            )
+            or cls._is_purchasing_participant(
+                material_request,
+                user_id,
+            )
+        )
+
+    @classmethod
+    def _require_engineering_participant(
+        cls,
+        material_request: dict,
+        user_id,
+    ) -> None:
+        if not cls._is_engineering_participant(
+            material_request,
+            user_id,
+        ):
+            raise PermissionError(
+                "Only the Engineering requester of this "
+                "Material Request may submit an "
+                "Engineering response."
+            )
+
+    @classmethod
+    def _require_purchasing_participant(
+        cls,
+        material_request: dict,
+        user_id,
+    ) -> None:
+        if not cls._is_purchasing_participant(
+            material_request,
+            user_id,
+        ):
+            raise PermissionError(
+                "Only the Purchasing Officer assigned to "
+                "this Material Request may perform this "
+                "clarification action."
+            )
 
     @staticmethod
     def _log_activity(

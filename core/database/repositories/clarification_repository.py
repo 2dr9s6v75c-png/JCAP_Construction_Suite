@@ -101,6 +101,8 @@ class ClarificationRepository(BaseRepository):
                 mr.request_no,
                 mr.mr_number,
                 mr.request_description,
+                mr.requested_by_user_id,
+                mr.assigned_to,
 
                 assigned.username,
                 assigned.full_name,
@@ -544,12 +546,22 @@ class ClarificationRepository(BaseRepository):
             "request_no": row[12],
             "mr_number": row[13],
             "request_description": row[14],
-            "assigned_username": row[15],
-            "assigned_full_name": row[16],
-            "created_by_username": row[17],
-            "created_by_full_name": row[18],
-            "resolved_by_username": row[19],
-            "resolved_by_full_name": row[20],
+            "requested_by_user_id": (
+                str(row[15])
+                if row[15]
+                else None
+            ),
+            "material_request_assigned_to": (
+                str(row[16])
+                if row[16]
+                else None
+            ),
+            "assigned_username": row[17],
+            "assigned_full_name": row[18],
+            "created_by_username": row[19],
+            "created_by_full_name": row[20],
+            "resolved_by_username": row[21],
+            "resolved_by_full_name": row[22],
         }
 
     @staticmethod

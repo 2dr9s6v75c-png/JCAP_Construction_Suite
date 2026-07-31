@@ -6,7 +6,9 @@ from core.lifecycle.document_lifecycle import DocumentLifecycle
 from core.logging.activity_logger import ActivityLogger
 from core.numbering.numbering_service import generate_document_number
 from core.security.permissions import PermissionService
-
+from core.notifications.persistent_notification_service import (
+    PersistentNotificationService,
+)
 
 LOCK_TIMEOUT_MINUTES = 30
 
@@ -64,6 +66,7 @@ def create_material_request(data: dict, user: dict) -> str:
                 request_description,
                 material_request_description,
                 requested_by,
+                requested_by_user_id,
                 assigned_to,
                 priority,
                 status,
@@ -74,7 +77,7 @@ def create_material_request(data: dict, user: dict) -> str:
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s
             )
             RETURNING id
             """,
@@ -86,6 +89,7 @@ def create_material_request(data: dict, user: dict) -> str:
                 data["material_request_description"],
                 data["material_request_description"],
                 data["requested_by"],
+                user["id"],
                 data["assigned_to"],
                 data["priority"],
                 "New",
@@ -181,6 +185,9 @@ def get_material_requests(status_filter="Active"):
                 s.site_name,
                 mr.material_request_description,
                 mr.requested_by,
+                mr.requested_by_user_id,
+                requester_user.full_name,
+                requester_user.username,
                 mr.assigned_to,
                 assigned_user.full_name,
                 assigned_user.username,
@@ -196,6 +203,8 @@ def get_material_requests(status_filter="Active"):
                 ON p.client_id = c.id
             JOIN master.sites s
                 ON mr.site_id = s.id
+            LEFT JOIN core.users requester_user
+                ON mr.requested_by_user_id = requester_user.id
             LEFT JOIN core.users assigned_user
                 ON mr.assigned_to = assigned_user.id::text
             LEFT JOIN quotation.material_request_attachments att
@@ -211,6 +220,9 @@ def get_material_requests(status_filter="Active"):
                 s.site_name,
                 mr.material_request_description,
                 mr.requested_by,
+                mr.requested_by_user_id,
+                requester_user.full_name,
+                requester_user.username,
                 mr.assigned_to,
                 assigned_user.full_name,
                 assigned_user.username,
@@ -236,19 +248,24 @@ def get_material_requests(status_filter="Active"):
                 "site_name": row[6] or "",
                 "description": row[7] or "",
                 "requested_by": row[8] or "",
-                "assigned_to": (
+                "requested_by_user_id": (
                     str(row[9]) if row[9] else None
+                ),
+                "requested_by_user_full_name": row[10] or "",
+                "requested_by_username": row[11] or "",
+                "assigned_to": (
+                    str(row[12]) if row[12] else None
                 ),
                 "assigned_to_id": (
-                    str(row[9]) if row[9] else None
+                    str(row[12]) if row[12] else None
                 ),
-                "assigned_to_name": row[10] or "",
-                "assigned_to_username": row[11] or "",
-                "priority": row[12] or "",
-                "status": row[13] or "",
-                "due_date": row[14],
-                "created_at": row[15],
-                "attachment_count": row[16] or 0,
+                "assigned_to_name": row[13] or "",
+                "assigned_to_username": row[14] or "",
+                "priority": row[15] or "",
+                "status": row[16] or "",
+                "due_date": row[17],
+                "created_at": row[18],
+                "attachment_count": row[19] or 0,
             }
             for row in rows
         ]
@@ -281,6 +298,9 @@ def get_material_request(material_request_id: str):
                 s.site_name,
                 mr.material_request_description,
                 mr.requested_by,
+                mr.requested_by_user_id,
+                requester_user.full_name,
+                requester_user.username,
                 mr.assigned_to,
                 assigned_user.full_name,
                 assigned_user.username,
@@ -298,6 +318,8 @@ def get_material_request(material_request_id: str):
                 ON p.client_id = c.id
             JOIN master.sites s
                 ON mr.site_id = s.id
+            LEFT JOIN core.users requester_user
+                ON mr.requested_by_user_id = requester_user.id
             LEFT JOIN core.users assigned_user
                 ON mr.assigned_to = assigned_user.id::text
             WHERE mr.id = %s
@@ -328,7 +350,7 @@ def get_material_request(material_request_id: str):
 
         attachments = cur.fetchall()
 
-        assigned_to_id = row[11]
+        assigned_to_id = row[14]
 
         return {
             "id": str(row[0]),
@@ -343,6 +365,11 @@ def get_material_request(material_request_id: str):
             "location": row[8] or "",
             "material_request_description": row[9] or "",
             "requested_by": row[10] or "",
+            "requested_by_user_id": (
+                str(row[11]) if row[11] else None
+            ),
+            "requested_by_user_full_name": row[12] or "",
+            "requested_by_username": row[13] or "",
             "assigned_to": (
                 str(assigned_to_id)
                 if assigned_to_id
@@ -353,19 +380,19 @@ def get_material_request(material_request_id: str):
                 if assigned_to_id
                 else None
             ),
-            "assigned_to_name": row[12] or "",
-            "assigned_to_username": row[13] or "",
-            "priority": row[14] or "",
-            "status": row[15] or "",
-            "due_date": row[16],
-            "remarks": row[17] or "",
-            "folder_name": row[18] or "",
-            "created_at": row[19],
+            "assigned_to_name": row[15] or "",
+            "assigned_to_username": row[16] or "",
+            "priority": row[17] or "",
+            "status": row[18] or "",
+            "due_date": row[19],
+            "remarks": row[20] or "",
+            "folder_name": row[21] or "",
+            "created_at": row[22],
             "current_assignment_id": (
-                str(row[20]) if row[20] else None
+                str(row[23]) if row[23] else None
             ),
             "assignment_id": (
-                str(row[20]) if row[20] else None
+                str(row[23]) if row[23] else None
             ),
             "attachments": [
                 {

@@ -552,6 +552,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                     "clarifications.record_supplier"
                 ),
             )
+            and self.is_assigned_purchasing_participant()
         )
 
         section = ClarificationsTab(
@@ -1189,6 +1190,15 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 self.supplier_quotations
             )
 
+
+    def is_assigned_purchasing_participant(self):
+        if not self.request:
+            return False
+        return (
+            str(self.request.get("assigned_to") or self.request.get("assigned_to_id") or "")
+            == str(self.user.get("id"))
+        )
+
     # ============================================================
     # CLARIFICATION ACTIONS
     # ============================================================
@@ -1208,12 +1218,15 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
             return
 
-        if not PermissionService.has_permission(
-            self.user,
-            (
-                "material_requests."
-                "clarifications.record_supplier"
-            ),
+        if (
+            not PermissionService.has_permission(
+                self.user,
+                (
+                    "material_requests."
+                    "clarifications.record_supplier"
+                ),
+            )
+            or not self.is_assigned_purchasing_participant()
         ):
             NotificationService.error(
                 (

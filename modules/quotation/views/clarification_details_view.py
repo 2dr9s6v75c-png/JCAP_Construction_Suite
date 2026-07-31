@@ -765,12 +765,19 @@ class ClarificationDetailsView(ctk.CTkFrame):
             "",
         )
 
+        title = status or "Clarification"
+        description = self.get_status_message(status)
+        if not self.is_clarification_participant():
+            title = "Read Only"
+            description = (
+                "You can view this clarification and download attachments, "
+                "but only the Engineering requester and assigned Purchasing "
+                "Officer can perform workflow actions."
+            )
         self.build_action_title(
             parent,
-            status or "Clarification",
-            self.get_status_message(
-                status
-            ),
+            title,
+            description,
         )
 
     def build_action_title(
@@ -1015,6 +1022,29 @@ class ClarificationDetailsView(ctk.CTkFrame):
     # PERMISSION HELPERS
     # ============================================================
 
+    def is_engineering_participant(self):
+        return (
+            str(self.clarification.get("requested_by_user_id") or "")
+            == str(self.user.get("id"))
+        )
+
+    def is_purchasing_participant(self):
+        return (
+            str(
+                self.clarification.get(
+                    "material_request_assigned_to"
+                )
+                or ""
+            )
+            == str(self.user.get("id"))
+        )
+
+    def is_clarification_participant(self):
+        return (
+            self.is_engineering_participant()
+            or self.is_purchasing_participant()
+        )
+
     def can_submit_engineering_response(self):
         return (
             PermissionService.has_permission(
@@ -1024,41 +1054,43 @@ class ClarificationDetailsView(ctk.CTkFrame):
                     "clarifications.reply"
                 ),
             )
-            and self.clarification.get(
-                "assigned_to"
-            )
-            == str(
-                self.user.get(
-                    "id"
-                )
-            )
+            and self.is_engineering_participant()
         )
 
     def can_forward_to_supplier(self):
-        return PermissionService.has_permission(
+        return (
+            PermissionService.has_permission(
             self.user,
             (
                 "material_requests."
                 "clarifications.forward"
             ),
         )
+            and self.is_purchasing_participant()
+        )
 
     def can_record_supplier_follow_up(self):
-        return PermissionService.has_permission(
+        return (
+            PermissionService.has_permission(
             self.user,
             (
                 "material_requests."
                 "clarifications.record_supplier"
             ),
         )
+            and self.is_purchasing_participant()
+        )
 
     def can_resolve_clarification(self):
-        return PermissionService.has_permission(
+        return (
+            PermissionService.has_permission(
             self.user,
             (
                 "material_requests."
                 "clarifications.resolve"
             ),
+        )
+            and self.is_purchasing_participant()
         )
 
     # ============================================================

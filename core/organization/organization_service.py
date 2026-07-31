@@ -88,6 +88,34 @@ class OrganizationService:
         return UserRepository.get_active()
 
     @classmethod
+    def get_active_users_by_role(
+        cls,
+        role_name: str,
+    ) -> list[dict]:
+        """
+        Return active users assigned to the specified role.
+
+        Matching is case-insensitive and supports both the
+        current database role name and the temporary legacy role.
+        """
+        normalized_role = cls._clean_text(
+            role_name
+        ).lower()
+
+        if not normalized_role:
+            return []
+
+        return [
+            user
+            for user in cls.get_active_users()
+            if cls._clean_text(
+                user.get("role_name")
+                or user.get("role")
+                or user.get("legacy_role")
+            ).lower() == normalized_role
+        ]
+
+    @classmethod
     def get_user(cls, user_id):
         if not user_id:
             return None
