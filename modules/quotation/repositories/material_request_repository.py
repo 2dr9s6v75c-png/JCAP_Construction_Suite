@@ -17,6 +17,7 @@ _MATERIAL_REQUEST_COLUMNS = """
     material_request.project_id,
     material_request.request_description,
     material_request.requested_by,
+    material_request.requested_by_user_id,
     material_request.assigned_to,
     material_request.priority,
     material_request.status,
@@ -100,22 +101,23 @@ class MaterialRequestRepository(BaseRepository):
             "project_id": row[2],
             "request_description": row[3],
             "requested_by": row[4],
-            "assigned_to": row[5],
-            "priority": row[6],
-            "status": row[7],
-            "due_date": row[8],
-            "remarks": row[9],
-            "folder_name": row[10],
-            "created_by": row[11],
-            "created_at": row[12],
-            "updated_at": row[13],
-            "material_request_description": row[14],
-            "mr_number": row[15],
-            "locked_by": row[16],
-            "locked_at": row[17],
-            "lock_expires_at": row[18],
-            "workflow_status": row[19],
-            "current_assignment_id": row[20],
+            "requested_by_user_id": row[5],
+            "assigned_to": row[6],
+            "priority": row[7],
+            "status": row[8],
+            "due_date": row[9],
+            "remarks": row[10],
+            "folder_name": row[11],
+            "created_by": row[12],
+            "created_at": row[13],
+            "updated_at": row[14],
+            "material_request_description": row[15],
+            "mr_number": row[16],
+            "locked_by": row[17],
+            "locked_at": row[18],
+            "lock_expires_at": row[19],
+            "workflow_status": row[20],
+            "current_assignment_id": row[21],
         }
 
     @staticmethod
@@ -138,7 +140,10 @@ class MaterialRequestRepository(BaseRepository):
             (material_request_id,),
             cursor=cursor,
         )
-        return cls._map_material_request_row(row)
+
+        return cls._map_material_request_row(
+            row
+        )
 
     @classmethod
     def update_assignment_context(
@@ -154,7 +159,9 @@ class MaterialRequestRepository(BaseRepository):
         Update the assignment pointer, assignee, workflow status, and the
         legacy status used by the current Quotation Monitoring UI.
         """
-        status_value = cls._status_value(workflow_status)
+        status_value = cls._status_value(
+            workflow_status
+        )
 
         row = cls.execute_returning(
             _UPDATE_ASSIGNMENT_CONTEXT_SQL,
@@ -167,7 +174,10 @@ class MaterialRequestRepository(BaseRepository):
             ),
             cursor=cursor,
         )
-        return cls._map_material_request_row(row)
+
+        return cls._map_material_request_row(
+            row
+        )
 
     @classmethod
     def clear_assignment_context(
@@ -177,7 +187,9 @@ class MaterialRequestRepository(BaseRepository):
         *,
         cursor=None,
     ) -> dict[str, Any] | None:
-        status_value = cls._status_value(workflow_status)
+        status_value = cls._status_value(
+            workflow_status
+        )
 
         row = cls.execute_returning(
             _CLEAR_ASSIGNMENT_CONTEXT_SQL,
@@ -188,7 +200,10 @@ class MaterialRequestRepository(BaseRepository):
             ),
             cursor=cursor,
         )
-        return cls._map_material_request_row(row)
+
+        return cls._map_material_request_row(
+            row
+        )
 
     @classmethod
     def update_workflow_status(
@@ -198,7 +213,9 @@ class MaterialRequestRepository(BaseRepository):
         *,
         cursor=None,
     ) -> dict[str, Any] | None:
-        status_value = cls._status_value(workflow_status)
+        status_value = cls._status_value(
+            workflow_status
+        )
 
         row = cls.execute_returning(
             _UPDATE_WORKFLOW_STATUS_SQL,
@@ -209,4 +226,7 @@ class MaterialRequestRepository(BaseRepository):
             ),
             cursor=cursor,
         )
-        return cls._map_material_request_row(row)
+
+        return cls._map_material_request_row(
+            row
+        )

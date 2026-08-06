@@ -3,6 +3,9 @@ from core.database.repositories.clarification_repository import (
     ClarificationRepository,
 )
 from core.notifications.notification_service import NotificationService
+from core.notifications.persistent_notification_service import (
+    PersistentNotificationService,
+)
 from core.organization.organization_service import OrganizationService
 from core.security.permissions import PermissionService
 
@@ -214,7 +217,15 @@ class ClarificationService:
                 sent_by=user_id,
                 cursor=cur,
             )
-            # Persistent notification skipped (notification infrastructure not yet implemented).
+
+            PersistentNotificationService.notify_supplier_clarification_recorded(
+                recipient_user_id=engineering_user_id,
+                clarification_id=clarification_id,
+                mr_number=material_request["mr_number"],
+                subject=subject,
+                created_by=user_id,
+                cursor=cur,
+            )
 
             cls._log_activity(
                 cursor=cur,
@@ -317,7 +328,15 @@ class ClarificationService:
                 cls.STATUS_RESPONSE_READY,
                 cursor=cur,
             )
-            # Persistent notification skipped (notification infrastructure not yet implemented).
+
+            PersistentNotificationService.notify_engineering_response_submitted(
+                recipient_user_id=material_request.get("assigned_to"),
+                clarification_id=clarification_id,
+                mr_number=clarification["mr_number"],
+                subject=clarification["subject"],
+                created_by=user_id,
+                cursor=cur,
+            )
 
             cls._log_activity(
                 cursor=cur,
@@ -525,7 +544,15 @@ class ClarificationService:
                 cls.STATUS_AWAITING_ENGINEERING,
                 cursor=cur,
             )
-            # Persistent notification skipped (notification infrastructure not yet implemented).
+
+            PersistentNotificationService.notify_supplier_follow_up_recorded(
+                recipient_user_id=clarification["assigned_to"],
+                clarification_id=clarification_id,
+                mr_number=clarification["mr_number"],
+                subject=clarification["subject"],
+                created_by=user_id,
+                cursor=cur,
+            )
 
             cls._log_activity(
                 cursor=cur,
@@ -610,6 +637,17 @@ class ClarificationService:
             ClarificationRepository.resolve(
                 clarification_id,
                 user_id,
+                cursor=cur,
+            )
+
+            PersistentNotificationService.notify_supplier_clarification_resolved(
+                recipient_user_id=material_request.get(
+                    "requested_by_user_id"
+                ),
+                clarification_id=clarification_id,
+                mr_number=clarification["mr_number"],
+                subject=clarification["subject"],
+                created_by=user_id,
                 cursor=cur,
             )
 

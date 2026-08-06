@@ -882,14 +882,29 @@ class MainWindow(ctk.CTk):
             )
             return
 
-        if entity_type == NotificationEntity.CLARIFICATION:
-            self.show_clarification_details(
+        material_request_entity = str(
+            NotificationEntity.MATERIAL_REQUEST
+        ).strip().lower()
+
+        clarification_entity = str(
+            NotificationEntity.CLARIFICATION
+        ).strip().lower()
+
+        if entity_type in {
+            material_request_entity,
+            "material_request",
+        }:
+            self.show_existing_material_request(
                 entity_id
             )
             return
 
-        if entity_type == NotificationEntity.MATERIAL_REQUEST:
-            self.show_existing_material_request(
+        if entity_type in {
+            clarification_entity,
+            "clarification",
+            "supplier_clarification",
+        }:
+            self.show_clarification_details(
                 entity_id
             )
             return

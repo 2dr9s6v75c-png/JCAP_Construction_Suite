@@ -4,11 +4,12 @@ from core.database.connection import get_connection
 from core.documents.storage_service import copy_attachments_to_request_folder
 from core.lifecycle.document_lifecycle import DocumentLifecycle
 from core.logging.activity_logger import ActivityLogger
-from core.numbering.numbering_service import generate_document_number
-from core.security.permissions import PermissionService
 from core.notifications.persistent_notification_service import (
     PersistentNotificationService,
 )
+from core.numbering.numbering_service import generate_document_number
+from core.security.permissions import PermissionService
+
 
 LOCK_TIMEOUT_MINUTES = 30
 
@@ -133,6 +134,13 @@ def create_material_request(data: dict, user: dict) -> str:
             module=ActivityLogger.MODULE_QUOTATION,
             record_id=material_request_id,
             details=f"Created Material Request {mr_number}",
+        )
+
+        PersistentNotificationService.notify_material_request_created(
+            material_request_id=material_request_id,
+            mr_number=mr_number,
+            created_by=user["id"],
+            cursor=cur,
         )
 
         conn.commit()
