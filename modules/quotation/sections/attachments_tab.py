@@ -9,6 +9,7 @@ class AttachmentsTab(ctk.CTkFrame):
         parent,
         *,
         material_request_id,
+        material_request,
         current_user,
         is_archived=False,
         attachment_process=None,
@@ -21,6 +22,7 @@ class AttachmentsTab(ctk.CTkFrame):
         )
 
         self.material_request_id = material_request_id
+        self.material_request = material_request
         self.current_user = current_user
         self.is_archived = bool(is_archived)
         self.attachment_process = attachment_process
@@ -35,6 +37,7 @@ class AttachmentsTab(ctk.CTkFrame):
         self.panel = AttachmentPanel(
             self,
             material_request_id=self.material_request_id,
+            material_request=self.material_request,
             current_user=self.current_user,
             is_archived=self.is_archived,
             attachment_process=self.attachment_process,

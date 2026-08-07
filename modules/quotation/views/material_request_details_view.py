@@ -12,6 +12,7 @@ from core.documents.document_service import DocumentService
 from core.lifecycle.document_lifecycle import DocumentLifecycle
 from core.notifications.notification_service import NotificationService
 from core.security.permissions import PermissionService
+from core.security.ownership_service import OwnershipService
 
 from modules.quotation.components.assignment_dialog import AssignmentDialog
 from modules.quotation.components.collaboration_banner import (
@@ -187,22 +188,32 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             assigned=is_assigned
         )
 
+        assignment_allowed = (
+            OwnershipService.can_reassign_material_request(
+                self.user,
+                self.request,
+            )
+            if is_assigned
+            else OwnershipService.can_assign_material_request(
+                self.user,
+                self.request,
+            )
+        )
+
         self.header.set_assignment_enabled(
             enabled=(
                 not is_archived
-                and PermissionService
-                .can_assign_material_request(
-                    self.user
-                )
+                and assignment_allowed
             )
         )
 
         self.header.set_archive_enabled(
             (
                 not is_archived
-                and PermissionService
+                and OwnershipService
                 .can_archive_material_request(
-                    self.user
+                    self.user,
+                    self.request,
                 )
             )
         )
@@ -210,9 +221,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.header.set_edit_enabled(
             (
                 not is_archived
-                and PermissionService
+                and OwnershipService
                 .can_edit_material_request(
-                    self.user
+                    self.user,
+                    self.request,
                 )
             )
         )
@@ -449,6 +461,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         section = AttachmentsTab(
             parent,
             material_request_id=self.material_request_id,
+            material_request=self.request,
             current_user=self.user,
             is_archived=self.is_archived(),
             attachment_process=self.attachment_process,
@@ -478,30 +491,34 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 quotations=self.supplier_quotations,
                 can_add=(
                     not self.is_archived()
-                    and PermissionService
+                    and OwnershipService
                     .can_manage_supplier_quotations(
-                        self.user
+                        self.user,
+                        self.request,
                     )
                 ),
                 can_edit=(
                     not self.is_archived()
-                    and PermissionService
+                    and OwnershipService
                     .can_manage_supplier_quotations(
-                        self.user
+                        self.user,
+                        self.request,
                     )
                 ),
                 can_archive=(
                     not self.is_archived()
-                    and PermissionService
+                    and OwnershipService
                     .can_manage_supplier_quotations(
-                        self.user
+                        self.user,
+                        self.request,
                     )
                 ),
                 can_restore=(
                     not self.is_archived()
-                    and PermissionService
+                    and OwnershipService
                     .can_manage_supplier_quotations(
-                        self.user
+                        self.user,
+                        self.request,
                     )
                 ),
                 on_add=self.open_new_supplier_quotation_dialog,
@@ -518,9 +535,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 material_request_archived=self.is_archived(),
                 can_manage_files=(
                     not self.is_archived()
-                    and PermissionService
+                    and OwnershipService
                     .can_manage_supplier_quotations(
-                        self.user
+                        self.user,
+                        self.request,
                     )
                 ),
             )
@@ -545,14 +563,11 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
     def build_clarifications_tab(self, parent):
         can_record = (
             not self.is_archived()
-            and PermissionService.has_permission(
+            and OwnershipService
+            .can_record_supplier_clarification(
                 self.user,
-                (
-                    "material_requests."
-                    "clarifications.record_supplier"
-                ),
+                self.request,
             )
-            and self.is_assigned_purchasing_participant()
         )
 
         section = ClarificationsTab(
@@ -629,8 +644,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
             return
 
-        if not PermissionService.can_manage_supplier_quotations(
-            self.user
+        if not OwnershipService.can_manage_supplier_quotations(
+            self.user,
+            self.request,
         ):
             NotificationService.error(
                 (
@@ -699,8 +715,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
             return
 
-        if not PermissionService.can_manage_supplier_quotations(
-            self.user
+        if not OwnershipService.can_manage_supplier_quotations(
+            self.user,
+            self.request,
         ):
             NotificationService.error(
                 (
@@ -877,8 +894,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
             return
 
-        if not PermissionService.can_manage_supplier_quotations(
-            self.user
+        if not OwnershipService.can_manage_supplier_quotations(
+            self.user,
+            self.request,
         ):
             NotificationService.error(
                 (
@@ -994,8 +1012,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
             return
 
-        if not PermissionService.can_manage_supplier_quotations(
-            self.user
+        if not OwnershipService.can_manage_supplier_quotations(
+            self.user,
+            self.request,
         ):
             NotificationService.error(
                 (
@@ -1082,8 +1101,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
             return
 
-        if not PermissionService.can_manage_supplier_quotations(
-            self.user
+        if not OwnershipService.can_manage_supplier_quotations(
+            self.user,
+            self.request,
         ):
             NotificationService.error(
                 (
@@ -1192,11 +1212,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
 
     def is_assigned_purchasing_participant(self):
-        if not self.request:
-            return False
-        return (
-            str(self.request.get("assigned_to") or self.request.get("assigned_to_id") or "")
-            == str(self.user.get("id"))
+        return OwnershipService.is_operational_owner(
+            self.user,
+            self.request,
         )
 
     # ============================================================
@@ -1218,15 +1236,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
             return
 
-        if (
-            not PermissionService.has_permission(
-                self.user,
-                (
-                    "material_requests."
-                    "clarifications.record_supplier"
-                ),
-            )
-            or not self.is_assigned_purchasing_participant()
+        if not OwnershipService.can_record_supplier_clarification(
+            self.user,
+            self.request,
         ):
             NotificationService.error(
                 (
@@ -1299,21 +1311,31 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
             return
 
-        if not PermissionService.can_assign_material_request(
-            self.user
-        ):
+        is_assigned = bool(
+            self.request.get("current_assignment_id")
+        )
+
+        assignment_allowed = (
+            OwnershipService.can_reassign_material_request(
+                self.user,
+                self.request,
+            )
+            if is_assigned
+            else OwnershipService.can_assign_material_request(
+                self.user,
+                self.request,
+            )
+        )
+
+        if not assignment_allowed:
             NotificationService.error(
                 (
                     "You do not have permission to assign "
-                    "Material Requests."
+                    "or reassign this Material Request."
                 ),
                 title="Permission Denied",
             )
             return
-
-        is_assigned = bool(
-            self.request.get("current_assignment_id")
-        )
 
         AssignmentDialog(
             self,
@@ -1439,8 +1461,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
             return
 
-        if not PermissionService.can_edit_material_request(
-            self.user
+        if not OwnershipService.can_edit_material_request(
+            self.user,
+            self.request,
         ):
             NotificationService.error(
                 (
@@ -1460,8 +1483,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         if not self.request:
             return
 
-        if not PermissionService.can_archive_material_request(
-            self.user
+        if not OwnershipService.can_archive_material_request(
+            self.user,
+            self.request,
         ):
             NotificationService.error(
                 (
@@ -1527,8 +1551,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         if not self.request:
             return
 
-        if not PermissionService.can_restore_material_request(
-            self.user
+        if not OwnershipService.can_restore_material_request(
+            self.user,
+            self.request,
         ):
             NotificationService.error(
                 (
@@ -1606,8 +1631,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             return
 
         has_edit_permission = (
-            PermissionService.can_edit_material_request(
-                self.user
+            OwnershipService.can_edit_material_request(
+                self.user,
+                self.request,
             )
         )
 

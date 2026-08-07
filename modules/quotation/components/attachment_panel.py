@@ -8,6 +8,7 @@ from typing import Any
 import customtkinter as ctk
 
 from core.notifications.notification_service import NotificationService
+from core.security.ownership_service import OwnershipService
 from modules.quotation.processes.material_request_attachment_process import (
     MaterialRequestAttachmentProcess,
 )
@@ -50,6 +51,7 @@ class AttachmentPanel(ctk.CTkFrame):
         parent,
         *,
         material_request_id,
+        material_request,
         current_user,
         is_archived=False,
         attachment_process=None,
@@ -62,12 +64,20 @@ class AttachmentPanel(ctk.CTkFrame):
         )
 
         self.material_request_id = material_request_id
+        self.material_request = material_request
         self.current_user = current_user
         self.is_archived = bool(is_archived)
         self.attachment_process = (
             attachment_process or MaterialRequestAttachmentProcess()
         )
         self.on_data_changed = on_data_changed
+
+        self.can_upload_attachments = (
+            OwnershipService.can_upload_material_request_documents(
+                self.current_user,
+                self.material_request,
+            )
+        )
 
         self.attachments: list[dict[str, Any]] = []
         self.filtered_attachments: list[dict[str, Any]] = []
@@ -454,6 +464,16 @@ class AttachmentPanel(ctk.CTkFrame):
     # ============================================================
 
     def upload_files(self):
+        if not self.can_upload_attachments:
+            NotificationService.error(
+                (
+                    "You do not have permission to upload "
+                    "Material Request attachments."
+                ),
+                title="Permission Denied",
+            )
+            return
+
         if self.is_archived:
             NotificationService.warning(
                 (
@@ -556,6 +576,20 @@ class AttachmentPanel(ctk.CTkFrame):
             )
             return
 
+        if not OwnershipService.can_delete_attachment(
+            self.current_user,
+            self.material_request,
+            attachment,
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to delete "
+                    "the selected attachment."
+                ),
+                title="Permission Denied",
+            )
+            return
+
         filename = (
             attachment.get("original_filename")
             or attachment.get("stored_filename")
@@ -630,15 +664,37 @@ class AttachmentPanel(ctk.CTkFrame):
         self.open_folder_button.configure(
             state="normal" if has_selection else "disabled"
         )
+        selected_attachment = self._get_selected_attachment()
+
+        can_delete_selected = (
+            selected_attachment is not None
+            and OwnershipService.can_delete_attachment(
+                self.current_user,
+                self.material_request,
+                selected_attachment,
+            )
+        )
+
         self.delete_button.configure(
             state=(
                 "normal"
-                if has_selection and not self.is_archived
+                if (
+                    has_selection
+                    and not self.is_archived
+                    and can_delete_selected
+                )
                 else "disabled"
             )
         )
         self.upload_button.configure(
-            state="disabled" if self.is_archived else "normal"
+            state=(
+                "normal"
+                if (
+                    not self.is_archived
+                    and self.can_upload_attachments
+                )
+                else "disabled"
+            )
         )
 
     def _update_header(self):

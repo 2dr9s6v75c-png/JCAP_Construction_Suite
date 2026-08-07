@@ -17,6 +17,7 @@ from typing import Any
 from uuid import UUID
 
 from core.database.transaction_manager import TransactionManager
+from core.logging.activity_logger import ActivityLogger
 from core.notifications.persistent_notification_service import (
     PersistentNotificationService,
 )
@@ -113,6 +114,31 @@ class MaterialRequestAssignmentProcess:
                     "Material Request assignment context could not be updated."
                 )
 
+            purchasing_officer = OrganizationService.get_user(
+                assigned_to
+            )
+            purchasing_officer_name = (
+                purchasing_officer.get("full_name")
+                if purchasing_officer
+                else None
+            ) or (
+                purchasing_officer.get("username")
+                if purchasing_officer
+                else None
+            ) or "the assigned Purchasing Officer"
+
+            ActivityLogger.log(
+                cursor,
+                user_id=current_user.get("id"),
+                action="ASSIGN",
+                module=ActivityLogger.MODULE_QUOTATION,
+                record_id=material_request_id,
+                details=(
+                    f"Assigned Material Request {mr_number} to "
+                    f"{purchasing_officer_name}."
+                ),
+            )
+
             PersistentNotificationService.notify_material_request_assigned(
                 recipient_user_id=assigned_to,
                 material_request_id=material_request_id,
@@ -124,16 +150,8 @@ class MaterialRequestAssignmentProcess:
             requester_user_id = material_request.get(
                 "requested_by_user_id"
             )
-            purchasing_officer = OrganizationService.get_user(
-                assigned_to
-            )
 
             if requester_user_id and purchasing_officer:
-                purchasing_officer_name = (
-                    purchasing_officer.get("full_name")
-                    or purchasing_officer.get("username")
-                    or "the assigned Purchasing Officer"
-                )
 
                 PersistentNotificationService.notify_requester_material_request_assigned(
                     recipient_user_id=requester_user_id,
@@ -225,6 +243,31 @@ class MaterialRequestAssignmentProcess:
                     "Material Request assignment context could not be updated."
                 )
 
+            purchasing_officer = OrganizationService.get_user(
+                assigned_to
+            )
+            purchasing_officer_name = (
+                purchasing_officer.get("full_name")
+                if purchasing_officer
+                else None
+            ) or (
+                purchasing_officer.get("username")
+                if purchasing_officer
+                else None
+            ) or "the newly assigned Purchasing Officer"
+
+            ActivityLogger.log(
+                cursor,
+                user_id=current_user.get("id"),
+                action="REASSIGN",
+                module=ActivityLogger.MODULE_QUOTATION,
+                record_id=material_request_id,
+                details=(
+                    f"Reassigned Material Request {mr_number} to "
+                    f"{purchasing_officer_name}."
+                ),
+            )
+
             PersistentNotificationService.notify_material_request_reassigned(
                 recipient_user_id=assigned_to,
                 material_request_id=material_request_id,
@@ -236,16 +279,8 @@ class MaterialRequestAssignmentProcess:
             requester_user_id = material_request.get(
                 "requested_by_user_id"
             )
-            purchasing_officer = OrganizationService.get_user(
-                assigned_to
-            )
 
             if requester_user_id and purchasing_officer:
-                purchasing_officer_name = (
-                    purchasing_officer.get("full_name")
-                    or purchasing_officer.get("username")
-                    or "the newly assigned Purchasing Officer"
-                )
 
                 PersistentNotificationService.notify_requester_material_request_reassigned(
                     recipient_user_id=requester_user_id,

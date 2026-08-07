@@ -474,6 +474,7 @@ def lock_material_request(material_request_id: str, user: dict):
         cur.execute(
             """
             SELECT
+                mr_number,
                 locked_by,
                 lock_expires_at
             FROM quotation.material_requests
@@ -488,7 +489,7 @@ def lock_material_request(material_request_id: str, user: dict):
         if not row:
             raise ValueError("Material Request not found.")
 
-        locked_by, lock_expires_at = row
+        mr_number, locked_by, lock_expires_at = row
         now = datetime.now()
 
         if (
@@ -521,6 +522,15 @@ def lock_material_request(material_request_id: str, user: dict):
             ),
         )
 
+        ActivityLogger.log(
+            cur,
+            user_id=user["id"],
+            action=ActivityLogger.ACTION_LOCK,
+            module=ActivityLogger.MODULE_QUOTATION,
+            record_id=material_request_id,
+            details=f"Locked Material Request {mr_number}",
+        )
+
         conn.commit()
 
         return {
@@ -551,12 +561,27 @@ def unlock_material_request(material_request_id: str, user: dict):
                 lock_expires_at = NULL
             WHERE id = %s
               AND locked_by = %s
+            RETURNING mr_number
             """,
             (
                 material_request_id,
                 user["id"],
             ),
         )
+
+        row = cur.fetchone()
+
+        if row:
+            mr_number = row[0]
+
+            ActivityLogger.log(
+                cur,
+                user_id=user["id"],
+                action=ActivityLogger.ACTION_UNLOCK,
+                module=ActivityLogger.MODULE_QUOTATION,
+                record_id=material_request_id,
+                details=f"Unlocked Material Request {mr_number}",
+            )
 
         conn.commit()
 
