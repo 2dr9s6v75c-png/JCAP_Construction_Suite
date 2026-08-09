@@ -30,6 +30,7 @@ class QuotationView(ctk.CTkFrame):
         self.requests = []
         self.all_requests = []
         self.filter_buttons = {}
+        self._realtime_refresh_after_id = None
 
         self.build_ui()
         self.load_requests()
@@ -776,6 +777,66 @@ class QuotationView(ctk.CTkFrame):
             )
 
         return str(value)
+
+    # ============================================================
+    # REAL-TIME SYNCHRONIZATION
+    # ============================================================
+
+    def handle_realtime_event(self, event):
+        if not isinstance(event, dict):
+            return
+
+        event_type = str(
+            event.get("event_type") or ""
+        ).strip()
+
+        entity_type = str(
+            event.get("entity_type") or ""
+        ).strip().lower()
+
+        is_reconciliation = (
+            event_type == "reconciliation_refresh"
+        )
+
+        is_material_request_event = (
+            entity_type == "material_request"
+            or event_type.startswith("material_request_")
+        )
+
+        if (
+            not is_reconciliation
+            and not is_material_request_event
+        ):
+            return
+
+        self._schedule_realtime_refresh()
+
+    def _schedule_realtime_refresh(self):
+        if self._realtime_refresh_after_id is not None:
+            try:
+                self.after_cancel(
+                    self._realtime_refresh_after_id
+                )
+            except Exception:
+                pass
+
+        self._realtime_refresh_after_id = self.after(
+            150,
+            self._run_realtime_refresh,
+        )
+
+    def _run_realtime_refresh(self):
+        self._realtime_refresh_after_id = None
+
+        try:
+            exists = self.winfo_exists()
+        except Exception:
+            exists = False
+
+        if not exists:
+            return
+
+        self.load_requests()
 
     # ============================================================
     # ACTIONS

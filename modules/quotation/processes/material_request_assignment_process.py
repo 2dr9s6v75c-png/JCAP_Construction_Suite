@@ -18,6 +18,7 @@ from uuid import UUID
 
 from core.database.transaction_manager import TransactionManager
 from core.logging.activity_logger import ActivityLogger
+from core.realtime.realtime_event_service import RealtimeEventService
 from core.notifications.persistent_notification_service import (
     PersistentNotificationService,
 )
@@ -162,6 +163,20 @@ class MaterialRequestAssignmentProcess:
                     cursor=cursor,
                 )
 
+            RealtimeEventService.publish(
+                "material_request_assigned",
+                entity_type="material_request",
+                entity_id=material_request_id,
+                action="assigned",
+                actor_user_id=current_user.get("id"),
+                data={
+                    "mr_number": mr_number,
+                    "assigned_to": str(assigned_to),
+                    "assigned_to_name": purchasing_officer_name,
+                },
+                cursor=cursor,
+            )
+
             return {
                 "assignment_id": assignment_id,
                 "material_request": updated_material_request,
@@ -290,6 +305,20 @@ class MaterialRequestAssignmentProcess:
                     reassigned_by=current_user.get("id"),
                     cursor=cursor,
                 )
+
+            RealtimeEventService.publish(
+                "material_request_reassigned",
+                entity_type="material_request",
+                entity_id=material_request_id,
+                action="reassigned",
+                actor_user_id=current_user.get("id"),
+                data={
+                    "mr_number": mr_number,
+                    "assigned_to": str(assigned_to),
+                    "assigned_to_name": purchasing_officer_name,
+                },
+                cursor=cursor,
+            )
 
             return {
                 "closed_assignment": closed_assignment,

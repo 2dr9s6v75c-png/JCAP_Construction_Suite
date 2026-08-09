@@ -1,3 +1,5 @@
+import queue
+
 import customtkinter as ctk
 
 from config import settings
@@ -10,6 +12,7 @@ from core.notifications.notification_constants import (
     NotificationEntity,
 )
 from core.notifications.notification_service import NotificationService
+from core.realtime.realtime_listener import RealtimeListener
 from core.security.permissions import PermissionService
 from core.theme import JCAPTheme
 
@@ -78,6 +81,12 @@ class MainWindow(ctk.CTk):
         self.active_navigation = None
         self.notification_panel = None
 
+        self._realtime_queue = queue.Queue()
+        self._realtime_listener = None
+        self._realtime_after_id = None
+        self._realtime_connected_once = False
+        self._realtime_was_disconnected = False
+
         self.title(
             f"{settings.APP_NAME} v{settings.APP_VERSION}"
         )
@@ -91,6 +100,13 @@ class MainWindow(ctk.CTk):
             pass
 
         self.build_ui()
+
+        self.protocol(
+            "WM_DELETE_WINDOW",
+            self.close_application,
+        )
+
+        self.start_realtime_sync()
 
     # ============================================================
     # MAIN UI
@@ -1304,6 +1320,7 @@ class MainWindow(ctk.CTk):
 
     def logout(self):
         self.close_notification_panel()
+        self.stop_realtime_sync()
         self.destroy()
 
         from modules.authentication.login_window import (
@@ -1313,21 +1330,219 @@ class MainWindow(ctk.CTk):
         login = LoginWindow()
         login.mainloop()
 
+    def close_application(self):
+        self.close_notification_panel()
+        self.stop_realtime_sync()
+        self.destroy()
+
+    # ============================================================
+    # REAL-TIME SYNCHRONIZATION
+    # ============================================================
+
+    def start_realtime_sync(self):
+        if (
+            self._realtime_listener is not None
+            and self._realtime_listener.is_running
+        ):
+            return
+
+        self._realtime_listener = RealtimeListener(
+            self._queue_realtime_event,
+            on_status_change=self._queue_realtime_status,
+        )
+        self._realtime_listener.start()
+
+        self._schedule_realtime_queue_processing()
+
+    def stop_realtime_sync(self):
+        if self._realtime_after_id is not None:
+            try:
+                self.after_cancel(self._realtime_after_id)
+            except Exception:
+                pass
+            self._realtime_after_id = None
+
+        listener = self._realtime_listener
+        self._realtime_listener = None
+
+        if listener is not None:
+            listener.stop()
+
+    def _queue_realtime_event(self, event):
+        self._realtime_queue.put(("event", event))
+
+    def _queue_realtime_status(self, connected):
+        self._realtime_queue.put(
+            ("status", bool(connected))
+        )
+
+    def _schedule_realtime_queue_processing(self):
+        self._realtime_after_id = self.after(
+            200,
+            self._process_realtime_queue,
+        )
+
+    def _process_realtime_queue(self):
+        self._realtime_after_id = None
+
+        try:
+            while True:
+                item_type, payload = (
+                    self._realtime_queue.get_nowait()
+                )
+
+                if item_type == "status":
+                    self._apply_realtime_status(
+                        bool(payload)
+                    )
+                elif item_type == "event":
+                    self.handle_realtime_event(
+                        payload
+                    )
+
+        except queue.Empty:
+            pass
+
+        try:
+            exists = self.winfo_exists()
+        except Exception:
+            exists = False
+
+        if exists:
+            self._schedule_realtime_queue_processing()
+
+    def _apply_realtime_status(self, connected):
+        label = getattr(
+            self,
+            "system_status_label",
+            None,
+        )
+
+        if connected:
+            should_reconcile = (
+                self._realtime_connected_once
+                and self._realtime_was_disconnected
+            )
+
+            self._realtime_connected_once = True
+            self._realtime_was_disconnected = False
+
+            if label is not None:
+                label.configure(
+                    text=(
+                        "● System Online   |   "
+                        "PostgreSQL Connected   |   "
+                        "Real-Time Connected   |   "
+                        f"Version {settings.APP_VERSION}"
+                    ),
+                    text_color=JCAPTheme.GREEN,
+                )
+
+            if should_reconcile:
+                self._run_reconciliation_refresh()
+
+            return
+
+        if self._realtime_connected_once:
+            self._realtime_was_disconnected = True
+
+        if label is not None:
+            label.configure(
+                text=(
+                    "● System Online   |   "
+                    "PostgreSQL Connected   |   "
+                    "Real-Time Reconnecting   |   "
+                    f"Version {settings.APP_VERSION}"
+                ),
+                text_color=JCAPTheme.ORANGE,
+            )
+
+    def handle_realtime_event(self, event):
+        if not isinstance(event, dict):
+            return
+
+        if getattr(self, "notification_bell", None):
+            try:
+                self.notification_bell.refresh()
+            except Exception:
+                pass
+
+        panel = getattr(
+            self,
+            "notification_panel",
+            None,
+        )
+        if (
+            panel is not None
+            and panel.winfo_exists()
+        ):
+            refresh_method = getattr(
+                panel,
+                "refresh",
+                None,
+            )
+            if callable(refresh_method):
+                try:
+                    refresh_method()
+                except Exception:
+                    pass
+
+        self._dispatch_realtime_event_to_workspace(
+            event
+        )
+
+    def _dispatch_realtime_event_to_workspace(
+        self,
+        event,
+    ):
+        for widget in self.workspace.winfo_children():
+            handler = getattr(
+                widget,
+                "handle_realtime_event",
+                None,
+            )
+            if not callable(handler):
+                continue
+
+            try:
+                handler(event)
+            except Exception:
+                pass
+
+    def _run_reconciliation_refresh(self):
+        """
+        Reconcile visible data once after the real-time listener reconnects.
+
+        Normal operation is event-driven and performs no periodic UI redraw.
+        """
+        self.handle_realtime_event(
+            {
+                "event_type": "reconciliation_refresh",
+                "entity_type": None,
+                "entity_id": None,
+                "action": "refresh_after_reconnect",
+                "actor_user_id": None,
+                "data": {},
+            }
+        )
+
     # ============================================================
     # STATUS BAR
     # ============================================================
 
     def build_status_bar(self):
-        ctk.CTkLabel(
+        self.system_status_label = ctk.CTkLabel(
             self.status_bar,
             text=(
                 "● System Online   |   "
                 "PostgreSQL Connected   |   "
+                "Real-Time Connecting   |   "
                 f"Version {settings.APP_VERSION}"
             ),
             font=("Segoe UI", 12),
             text_color=JCAPTheme.GREEN,
-        ).pack(
+        )
+        self.system_status_label.pack(
             side="left",
             padx=20,
         )

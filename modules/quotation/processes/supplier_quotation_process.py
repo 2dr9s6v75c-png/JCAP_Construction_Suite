@@ -26,6 +26,7 @@ from core.documents.storage_service import (
     delete_stored_file,
 )
 from core.logging.activity_logger import ActivityLogger
+from core.realtime.realtime_event_service import RealtimeEventService
 from modules.quotation.repositories.material_request_repository import (
     MaterialRequestRepository,
 )
@@ -165,6 +166,19 @@ class SupplierQuotationProcess:
                     ),
                 )
 
+                RealtimeEventService.publish(
+                    "material_request_supplier_quotation_changed",
+                    entity_type="material_request",
+                    entity_id=material_request["id"],
+                    action="supplier_quotation_created",
+                    actor_user_id=self._get_user_id(current_user),
+                    data={
+                        "mr_number": storage_context["request_no"],
+                        "supplier_quotation_id": str(quotation["id"]),
+                    },
+                    cursor=cursor,
+                )
+
                 return {
                     "supplier_quotation": quotation,
                     "files": file_records,
@@ -218,6 +232,16 @@ class SupplierQuotationProcess:
                 ),
             )
 
+            RealtimeEventService.publish(
+                "material_request_supplier_quotation_changed",
+                entity_type="material_request",
+                entity_id=updated["material_request_id"] if "update" in ("update", "update_status") else restored["material_request_id"],
+                action="supplier_quotation_updated",
+                actor_user_id=self._get_user_id(current_user),
+                data={"supplier_quotation_id": str(updated["id"])},
+                cursor=cursor,
+            )
+
             return updated
 
     def update_status(
@@ -250,6 +274,16 @@ class SupplierQuotationProcess:
                     f"{previous['status']} to {updated['status']} "
                     f"for {updated['supplier_name']}."
                 ),
+            )
+
+            RealtimeEventService.publish(
+                "material_request_supplier_quotation_changed",
+                entity_type="material_request",
+                entity_id=updated["material_request_id"] if "update_status" in ("update", "update_status") else restored["material_request_id"],
+                action="supplier_quotation_status_changed",
+                actor_user_id=self._get_user_id(current_user),
+                data={"supplier_quotation_id": str(updated["id"])},
+                cursor=cursor,
             )
 
             return updated
@@ -314,6 +348,19 @@ class SupplierQuotationProcess:
                     ),
                 )
 
+                RealtimeEventService.publish(
+                    "material_request_supplier_quotation_changed",
+                    entity_type="material_request",
+                    entity_id=quotation["material_request_id"],
+                    action="supplier_quotation_files_uploaded",
+                    actor_user_id=self._get_user_id(current_user),
+                    data={
+                        "supplier_quotation_id": str(quotation["id"]),
+                        "file_count": len(file_records),
+                    },
+                    cursor=cursor,
+                )
+
                 return file_records
 
         except Exception:
@@ -376,6 +423,19 @@ class SupplierQuotationProcess:
                     ),
                 )
 
+                RealtimeEventService.publish(
+                    "material_request_supplier_quotation_changed",
+                    entity_type="material_request",
+                    entity_id=quotation["material_request_id"],
+                    action="supplier_quotation_file_deleted",
+                    actor_user_id=self._get_user_id(current_user),
+                    data={
+                        "supplier_quotation_id": str(quotation["id"]),
+                        "filename": file_record["original_filename"],
+                    },
+                    cursor=cursor,
+                )
+
             self._delete_quarantined_file(quarantined_path)
             self._remove_empty_folder(
                 deleted_metadata.get("folder_path")
@@ -418,6 +478,16 @@ class SupplierQuotationProcess:
                 ),
             )
 
+            RealtimeEventService.publish(
+                "material_request_supplier_quotation_changed",
+                entity_type="material_request",
+                entity_id=archived["material_request_id"],
+                action="supplier_quotation_archived",
+                actor_user_id=self._get_user_id(current_user),
+                data={"supplier_quotation_id": str(archived["id"])},
+                cursor=cursor,
+            )
+
             return archived
 
     def restore(
@@ -441,6 +511,16 @@ class SupplierQuotationProcess:
                     "Restored Supplier Quotation from "
                     f"{restored['supplier_name']}."
                 ),
+            )
+
+            RealtimeEventService.publish(
+                "material_request_supplier_quotation_changed",
+                entity_type="material_request",
+                entity_id=restored["material_request_id"],
+                action="supplier_quotation_restored",
+                actor_user_id=self._get_user_id(current_user),
+                data={"supplier_quotation_id": str(restored["id"])},
+                cursor=cursor,
             )
 
             return restored
@@ -498,6 +578,18 @@ class SupplierQuotationProcess:
                 deleted_quotation = self._quotation_service.delete(
                     supplier_quotation_id,
                     current_user=current_user,
+                    cursor=cursor,
+                )
+
+                RealtimeEventService.publish(
+                    "material_request_supplier_quotation_changed",
+                    entity_type="material_request",
+                    entity_id=quotation["material_request_id"],
+                    action="supplier_quotation_deleted",
+                    actor_user_id=self._get_user_id(current_user),
+                    data={
+                        "supplier_quotation_id": str(quotation["id"]),
+                    },
                     cursor=cursor,
                 )
 

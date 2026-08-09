@@ -112,6 +112,8 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.summary = None
         self.collaboration_banner = None
         self.tabview = None
+        self._realtime_refresh_after_id = None
+        self._selected_tab_name = None
 
         self.load_supplier_quotations(
             notify_on_error=False
@@ -1412,6 +1414,14 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         )
 
     def reload_view_data(self):
+        selected_tab = None
+
+        if self.tabview is not None:
+            try:
+                selected_tab = self.tabview.get()
+            except Exception:
+                selected_tab = None
+
         self.request = get_material_request(
             self.material_request_id
         )
@@ -1441,6 +1451,93 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.supplier_quotations_section = None
 
         self.build_ui()
+
+        if selected_tab and self.tabview is not None:
+            try:
+                self.tabview.set(selected_tab)
+            except Exception:
+                pass
+
+    # ============================================================
+    # REAL-TIME SYNCHRONIZATION
+    # ============================================================
+
+    def handle_realtime_event(self, event):
+        if not isinstance(event, dict):
+            return
+
+        event_type = str(
+            event.get("event_type") or ""
+        ).strip()
+
+        entity_type = str(
+            event.get("entity_type") or ""
+        ).strip().lower()
+
+        entity_id = str(
+            event.get("entity_id") or ""
+        ).strip()
+
+        current_id = str(
+            self.material_request_id or ""
+        ).strip()
+
+        is_reconciliation = (
+            event_type == "reconciliation_refresh"
+        )
+
+        is_current_material_request = (
+            (
+                entity_type == "material_request"
+                or event_type.startswith("material_request_")
+            )
+            and entity_id == current_id
+        )
+
+        if (
+            not is_reconciliation
+            and not is_current_material_request
+        ):
+            return
+
+        self._schedule_realtime_refresh()
+
+    def _schedule_realtime_refresh(self):
+        if self._realtime_refresh_after_id is not None:
+            try:
+                self.after_cancel(
+                    self._realtime_refresh_after_id
+                )
+            except Exception:
+                pass
+
+        self._realtime_refresh_after_id = self.after(
+            150,
+            self._run_realtime_refresh,
+        )
+
+    def _run_realtime_refresh(self):
+        self._realtime_refresh_after_id = None
+
+        try:
+            exists = self.winfo_exists()
+        except Exception:
+            exists = False
+
+        if not exists:
+            return
+
+        try:
+            self.reload_view_data()
+        except Exception as error:
+            NotificationService.error(
+                (
+                    "Unable to refresh the Material Request "
+                    "after a real-time update."
+                ),
+                title="Real-Time Refresh",
+                error=error,
+            )
 
     # ============================================================
     # DOCUMENT ACTIONS

@@ -3,6 +3,7 @@ from core.database.repositories.clarification_repository import (
     ClarificationRepository,
 )
 from core.notifications.notification_service import NotificationService
+from core.realtime.realtime_event_service import RealtimeEventService
 from core.notifications.persistent_notification_service import (
     PersistentNotificationService,
 )
@@ -238,6 +239,20 @@ class ClarificationService:
                 ),
             )
 
+            RealtimeEventService.publish(
+                "material_request_clarification_created",
+                entity_type="material_request",
+                entity_id=material_request_id,
+                action="clarification_created",
+                actor_user_id=user_id,
+                data={
+                    "mr_number": material_request["mr_number"],
+                    "clarification_id": str(clarification_id),
+                    "subject": subject,
+                },
+                cursor=cur,
+            )
+
             conn.commit()
 
             return clarification_id
@@ -350,6 +365,19 @@ class ClarificationService:
                 ),
             )
 
+            RealtimeEventService.publish(
+                "material_request_clarification_updated",
+                entity_type="material_request",
+                entity_id=clarification["material_request_id"],
+                action="engineering_response_submitted",
+                actor_user_id=user_id,
+                data={
+                    "mr_number": clarification["mr_number"],
+                    "clarification_id": str(clarification_id),
+                },
+                cursor=cur,
+            )
+
             conn.commit()
 
             return message_id
@@ -447,6 +475,19 @@ class ClarificationService:
                     f"for {clarification['mr_number']}: "
                     f"{clarification['subject']}"
                 ),
+            )
+
+            RealtimeEventService.publish(
+                "material_request_clarification_updated",
+                entity_type="material_request",
+                entity_id=clarification["material_request_id"],
+                action="forwarded_to_supplier",
+                actor_user_id=user_id,
+                data={
+                    "mr_number": clarification["mr_number"],
+                    "clarification_id": str(clarification_id),
+                },
+                cursor=cur,
             )
 
             conn.commit()
@@ -566,6 +607,19 @@ class ClarificationService:
                 ),
             )
 
+            RealtimeEventService.publish(
+                "material_request_clarification_updated",
+                entity_type="material_request",
+                entity_id=clarification["material_request_id"],
+                action="supplier_follow_up_recorded",
+                actor_user_id=user_id,
+                data={
+                    "mr_number": clarification["mr_number"],
+                    "clarification_id": str(clarification_id),
+                },
+                cursor=cur,
+            )
+
             conn.commit()
 
             return message_id
@@ -661,6 +715,19 @@ class ClarificationService:
                     f"{clarification['mr_number']}: "
                     f"{clarification['subject']}"
                 ),
+            )
+
+            RealtimeEventService.publish(
+                "material_request_clarification_updated",
+                entity_type="material_request",
+                entity_id=clarification["material_request_id"],
+                action="clarification_resolved",
+                actor_user_id=user_id,
+                data={
+                    "mr_number": clarification["mr_number"],
+                    "clarification_id": str(clarification_id),
+                },
+                cursor=cur,
             )
 
             conn.commit()

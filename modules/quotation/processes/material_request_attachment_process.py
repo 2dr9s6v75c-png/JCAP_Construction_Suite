@@ -27,6 +27,7 @@ from core.documents.storage_service import (
     ensure_material_request_folder,
 )
 from core.logging.activity_logger import ActivityLogger
+from core.realtime.realtime_event_service import RealtimeEventService
 from modules.quotation.repositories.material_request_repository import (
     MaterialRequestRepository,
 )
@@ -182,6 +183,19 @@ class MaterialRequestAttachmentProcess:
                     module=ActivityLogger.MODULE_QUOTATION,
                     record_id=material_request["id"],
                     details=activity_details,
+                )
+
+                RealtimeEventService.publish(
+                    "material_request_attachment_uploaded",
+                    entity_type="material_request",
+                    entity_id=material_request["id"],
+                    action="attachment_uploaded",
+                    actor_user_id=self._get_user_id(current_user),
+                    data={
+                        "mr_number": storage_context["request_no"],
+                        "attachment_count": len(records),
+                    },
+                    cursor=cursor,
                 )
 
                 return records
@@ -349,6 +363,19 @@ class MaterialRequestAttachmentProcess:
                         f"{attachment['original_filename']} from "
                         f"{storage_context['request_no']}."
                     ),
+                )
+
+                RealtimeEventService.publish(
+                    "material_request_attachment_deleted",
+                    entity_type="material_request",
+                    entity_id=material_request["id"],
+                    action="attachment_deleted",
+                    actor_user_id=self._get_user_id(current_user),
+                    data={
+                        "mr_number": storage_context["request_no"],
+                        "original_filename": attachment["original_filename"],
+                    },
+                    cursor=cursor,
                 )
 
             self._delete_quarantined_file(quarantined_path)

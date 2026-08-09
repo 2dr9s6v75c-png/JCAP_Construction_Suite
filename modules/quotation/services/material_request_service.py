@@ -9,6 +9,7 @@ from core.notifications.persistent_notification_service import (
 )
 from core.numbering.numbering_service import generate_document_number
 from core.security.permissions import PermissionService
+from core.realtime.realtime_event_service import RealtimeEventService
 
 
 LOCK_TIMEOUT_MINUTES = 30
@@ -140,6 +141,16 @@ def create_material_request(data: dict, user: dict) -> str:
             material_request_id=material_request_id,
             mr_number=mr_number,
             created_by=user["id"],
+            cursor=cur,
+        )
+
+        RealtimeEventService.publish(
+            "material_request_created",
+            entity_type="material_request",
+            entity_id=material_request_id,
+            action="created",
+            actor_user_id=user["id"],
+            data={"mr_number": mr_number},
             cursor=cur,
         )
 
@@ -533,6 +544,16 @@ def lock_material_request(material_request_id: str, user: dict):
             details=f"Locked Material Request {mr_number}",
         )
 
+        RealtimeEventService.publish(
+            "material_request_lock_changed",
+            entity_type="material_request",
+            entity_id=material_request_id,
+            action="locked",
+            actor_user_id=user["id"],
+            data={"mr_number": mr_number},
+            cursor=cur,
+        )
+
         conn.commit()
 
         return {
@@ -583,6 +604,16 @@ def unlock_material_request(material_request_id: str, user: dict):
                 module=ActivityLogger.MODULE_QUOTATION,
                 record_id=material_request_id,
                 details=f"Unlocked Material Request {mr_number}",
+            )
+
+            RealtimeEventService.publish(
+                "material_request_lock_changed",
+                entity_type="material_request",
+                entity_id=material_request_id,
+                action="unlocked",
+                actor_user_id=user["id"],
+                data={"mr_number": mr_number},
+                cursor=cur,
             )
 
         conn.commit()
@@ -661,6 +692,16 @@ def force_unlock_material_request(
             ),
         )
 
+        RealtimeEventService.publish(
+            "material_request_lock_changed",
+            entity_type="material_request",
+            entity_id=material_request_id,
+            action="force_unlocked",
+            actor_user_id=user["id"],
+            data={"mr_number": mr_number},
+            cursor=cur,
+        )
+
         conn.commit()
         return mr_number
 
@@ -726,6 +767,14 @@ def get_material_request_lock_status(material_request_id: str):
                 WHERE id = %s
                 """,
                 (material_request_id,),
+            )
+            RealtimeEventService.publish(
+                "material_request_lock_changed",
+                entity_type="material_request",
+                entity_id=material_request_id,
+                action="expired",
+                actor_user_id=None,
+                cursor=cur,
             )
             conn.commit()
 
@@ -927,6 +976,16 @@ def update_material_request(
                     ),
                 )
 
+        RealtimeEventService.publish(
+            "material_request_updated",
+            entity_type="material_request",
+            entity_id=material_request_id,
+            action="updated",
+            actor_user_id=user["id"],
+            data={"mr_number": mr_number},
+            cursor=cur,
+        )
+
         conn.commit()
         return mr_number
 
@@ -1006,6 +1065,16 @@ def archive_material_request(
             details=f"Archived Material Request {mr_number}",
         )
 
+        RealtimeEventService.publish(
+            "material_request_archived",
+            entity_type="material_request",
+            entity_id=material_request_id,
+            action="archived",
+            actor_user_id=user["id"],
+            data={"mr_number": mr_number},
+            cursor=cur,
+        )
+
         conn.commit()
         return mr_number
 
@@ -1083,6 +1152,16 @@ def restore_material_request(
             module=ActivityLogger.MODULE_QUOTATION,
             record_id=material_request_id,
             details=f"Restored Material Request {mr_number}",
+        )
+
+        RealtimeEventService.publish(
+            "material_request_restored",
+            entity_type="material_request",
+            entity_id=material_request_id,
+            action="restored",
+            actor_user_id=user["id"],
+            data={"mr_number": mr_number},
+            cursor=cur,
         )
 
         conn.commit()
