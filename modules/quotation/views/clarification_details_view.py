@@ -48,6 +48,8 @@ class ClarificationDetailsView(ctk.CTkFrame):
         self.action_textbox = None
         self.action_button = None
         self.secondary_action_button = None
+        self.conversation_frame = None
+        self._realtime_refresh_after_id = None
 
         self.load_data()
         self.build_ui()
@@ -83,6 +85,7 @@ class ClarificationDetailsView(ctk.CTkFrame):
         self.action_textbox = None
         self.action_button = None
         self.secondary_action_button = None
+        self.conversation_frame = None
 
         self.build_ui()
 
@@ -331,6 +334,7 @@ class ClarificationDetailsView(ctk.CTkFrame):
             fg_color=JCAPTheme.BACKGROUND,
             corner_radius=10,
         )
+        self.conversation_frame = conversation
 
         conversation.grid(
             row=0,
@@ -390,6 +394,37 @@ class ClarificationDetailsView(ctk.CTkFrame):
         self.build_workflow_actions(
             action_frame
         )
+
+        self.after(
+            50,
+            self.scroll_conversation_to_latest,
+        )
+
+    def scroll_conversation_to_latest(self):
+        conversation = self.conversation_frame
+
+        if conversation is None:
+            return
+
+        try:
+            if not conversation.winfo_exists():
+                return
+
+            conversation.update_idletasks()
+
+            parent_canvas = getattr(
+                conversation,
+                "_parent_canvas",
+                None,
+            )
+
+            if parent_canvas is not None:
+                parent_canvas.yview_moveto(1.0)
+
+        except Exception:
+            # Scrolling is a UI convenience and must never
+            # interrupt the clarification workflow.
+            pass
 
     # ============================================================
     # MESSAGE CARDS
@@ -1015,6 +1050,91 @@ class ClarificationDetailsView(ctk.CTkFrame):
                     "Unable to resolve the clarification."
                 ),
                 title="Resolve Failed",
+                error=error,
+            )
+
+    # ============================================================
+    # REAL-TIME SYNCHRONIZATION
+    # ============================================================
+
+    def handle_realtime_event(self, event):
+        if not isinstance(event, dict):
+            return
+
+        event_type = str(
+            event.get("event_type") or ""
+        ).strip()
+
+        entity_type = str(
+            event.get("entity_type") or ""
+        ).strip().lower()
+
+        data = event.get("data") or {}
+        event_clarification_id = str(
+            data.get("clarification_id") or ""
+        ).strip()
+
+        current_clarification_id = str(
+            self.clarification_id or ""
+        ).strip()
+
+        is_reconciliation = (
+            event_type == "reconciliation_refresh"
+        )
+
+        is_current_clarification = (
+            (
+                entity_type == "material_request"
+                and event_type.startswith(
+                    "material_request_clarification_"
+                )
+            )
+            and event_clarification_id
+            == current_clarification_id
+        )
+
+        if (
+            not is_reconciliation
+            and not is_current_clarification
+        ):
+            return
+
+        self._schedule_realtime_refresh()
+
+    def _schedule_realtime_refresh(self):
+        if self._realtime_refresh_after_id is not None:
+            try:
+                self.after_cancel(
+                    self._realtime_refresh_after_id
+                )
+            except Exception:
+                pass
+
+        self._realtime_refresh_after_id = self.after(
+            150,
+            self._run_realtime_refresh,
+        )
+
+    def _run_realtime_refresh(self):
+        self._realtime_refresh_after_id = None
+
+        try:
+            exists = self.winfo_exists()
+        except Exception:
+            exists = False
+
+        if not exists:
+            return
+
+        try:
+            self.reload_view()
+        except Exception as error:
+            NotificationService.error(
+                (
+                    "Unable to refresh the Supplier "
+                    "Clarification after a real-time update."
+                ),
+                title="Real-Time Refresh",
                 error=error,
             )
 

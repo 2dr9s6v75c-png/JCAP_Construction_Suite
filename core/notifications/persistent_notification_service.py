@@ -64,6 +64,13 @@ class PersistentNotificationService:
         "SUPPLIER_CLARIFICATION_RESOLVED"
     )
 
+    SUPPLIER_QUOTATION_CREATED = (
+        "SUPPLIER_QUOTATION_CREATED"
+    )
+    SUPPLIER_QUOTATION_FILES_UPLOADED = (
+        "SUPPLIER_QUOTATION_FILES_UPLOADED"
+    )
+
     # ============================================================
     # ENTITY TYPES
     # ============================================================
@@ -549,6 +556,117 @@ class PersistentNotificationService:
                 cls.ENTITY_SUPPLIER_CLARIFICATION
             ),
             entity_id=clarification_id,
+            created_by=created_by,
+            cursor=cursor,
+        )
+
+    # ============================================================
+    # SUPPLIER QUOTATION CREATED
+    # ============================================================
+
+    @classmethod
+    def notify_supplier_quotation_created(
+        cls,
+        *,
+        recipient_user_id,
+        material_request_id,
+        mr_number: str,
+        supplier_name: str,
+        created_by=None,
+        cursor=None,
+    ) -> str | None:
+        """Notify the Engineering requester of a new quotation."""
+        if not recipient_user_id:
+            return None
+
+        material_request_id = cls._require_id(
+            material_request_id,
+            "Material Request ID is required.",
+        )
+        mr_number = cls._require_text(
+            mr_number,
+            "Material Request number is required.",
+        )
+        supplier_name = cls._require_text(
+            supplier_name,
+            "Supplier name is required.",
+        )
+
+        return cls._create(
+            recipient_user_id=recipient_user_id,
+            notification_type=cls.SUPPLIER_QUOTATION_CREATED,
+            title="Supplier Quotation Created",
+            message=(
+                f"A Supplier Quotation from {supplier_name} "
+                f"has been recorded for Material Request "
+                f"{mr_number}."
+            ),
+            entity_type=cls.ENTITY_MATERIAL_REQUEST,
+            entity_id=material_request_id,
+            created_by=created_by,
+            cursor=cursor,
+        )
+
+    # ============================================================
+    # SUPPLIER QUOTATION FILES UPLOADED
+    # ============================================================
+
+    @classmethod
+    def notify_supplier_quotation_files_uploaded(
+        cls,
+        *,
+        recipient_user_id,
+        material_request_id,
+        mr_number: str,
+        supplier_name: str,
+        file_count: int,
+        created_by=None,
+        cursor=None,
+    ) -> str | None:
+        """Notify the Engineering requester of new quotation files."""
+        if not recipient_user_id:
+            return None
+
+        material_request_id = cls._require_id(
+            material_request_id,
+            "Material Request ID is required.",
+        )
+        mr_number = cls._require_text(
+            mr_number,
+            "Material Request number is required.",
+        )
+        supplier_name = cls._require_text(
+            supplier_name,
+            "Supplier name is required.",
+        )
+
+        try:
+            normalized_file_count = int(file_count)
+        except (TypeError, ValueError):
+            normalized_file_count = 0
+
+        if normalized_file_count < 1:
+            raise ValueError(
+                "Supplier Quotation file count must be at least 1."
+            )
+
+        file_word = (
+            "file" if normalized_file_count == 1 else "files"
+        )
+
+        return cls._create(
+            recipient_user_id=recipient_user_id,
+            notification_type=(
+                cls.SUPPLIER_QUOTATION_FILES_UPLOADED
+            ),
+            title="Supplier Quotation Files Uploaded",
+            message=(
+                f"{normalized_file_count} quotation {file_word} "
+                f"from {supplier_name} has been uploaded for "
+                f"Material Request {mr_number}."
+            ),
+            entity_type=cls.ENTITY_MATERIAL_REQUEST,
+            entity_id=material_request_id,
             created_by=created_by,
             cursor=cursor,
         )

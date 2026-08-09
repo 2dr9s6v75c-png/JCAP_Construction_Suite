@@ -26,6 +26,9 @@ from core.documents.storage_service import (
     delete_stored_file,
 )
 from core.logging.activity_logger import ActivityLogger
+from core.notifications.persistent_notification_service import (
+    PersistentNotificationService,
+)
 from core.realtime.realtime_event_service import RealtimeEventService
 from modules.quotation.repositories.material_request_repository import (
     MaterialRequestRepository,
@@ -158,13 +161,27 @@ class SupplierQuotationProcess:
                     cursor,
                     user_id=self._get_user_id(current_user),
                     module=ActivityLogger.MODULE_QUOTATION,
-                    record_id=quotation["id"],
+                    record_id=material_request["id"],
                     details=(
                         "Created Supplier Quotation from "
                         f"{quotation['supplier_name']} for "
                         f"{storage_context['request_no']}."
                     ),
                 )
+
+                requester_user_id = material_request.get(
+                    "requested_by_user_id"
+                )
+
+                if requester_user_id:
+                    PersistentNotificationService.notify_supplier_quotation_created(
+                        recipient_user_id=requester_user_id,
+                        material_request_id=material_request["id"],
+                        mr_number=storage_context["request_no"],
+                        supplier_name=quotation["supplier_name"],
+                        created_by=self._get_user_id(current_user),
+                        cursor=cursor,
+                    )
 
                 RealtimeEventService.publish(
                     "material_request_supplier_quotation_changed",
@@ -224,7 +241,7 @@ class SupplierQuotationProcess:
                 cursor,
                 user_id=self._get_user_id(current_user),
                 module=ActivityLogger.MODULE_QUOTATION,
-                record_id=updated["id"],
+                record_id=updated["material_request_id"],
                 details=(
                     "Updated Supplier Quotation from "
                     f"{previous['supplier_name']} to "
@@ -268,7 +285,7 @@ class SupplierQuotationProcess:
                 user_id=self._get_user_id(current_user),
                 action=ActivityLogger.ACTION_STATUS_CHANGE,
                 module=ActivityLogger.MODULE_QUOTATION,
-                record_id=updated["id"],
+                record_id=updated["material_request_id"],
                 details=(
                     "Changed Supplier Quotation status from "
                     f"{previous['status']} to {updated['status']} "
@@ -340,13 +357,28 @@ class SupplierQuotationProcess:
                     cursor,
                     user_id=self._get_user_id(current_user),
                     module=ActivityLogger.MODULE_QUOTATION,
-                    record_id=quotation["id"],
+                    record_id=quotation["material_request_id"],
                     details=(
                         f"Uploaded {len(file_records)} file(s) for "
                         f"Supplier Quotation from "
                         f"{quotation['supplier_name']}."
                     ),
                 )
+
+                requester_user_id = material_request.get(
+                    "requested_by_user_id"
+                )
+
+                if requester_user_id:
+                    PersistentNotificationService.notify_supplier_quotation_files_uploaded(
+                        recipient_user_id=requester_user_id,
+                        material_request_id=material_request["id"],
+                        mr_number=storage_context["request_no"],
+                        supplier_name=quotation["supplier_name"],
+                        file_count=len(file_records),
+                        created_by=self._get_user_id(current_user),
+                        cursor=cursor,
+                    )
 
                 RealtimeEventService.publish(
                     "material_request_supplier_quotation_changed",
@@ -415,7 +447,7 @@ class SupplierQuotationProcess:
                     cursor,
                     user_id=self._get_user_id(current_user),
                     module=ActivityLogger.MODULE_QUOTATION,
-                    record_id=quotation["id"],
+                    record_id=quotation["material_request_id"],
                     details=(
                         "Deleted Supplier Quotation file "
                         f"{file_record['original_filename']} from "
@@ -471,7 +503,7 @@ class SupplierQuotationProcess:
                 cursor,
                 user_id=self._get_user_id(current_user),
                 module=ActivityLogger.MODULE_QUOTATION,
-                record_id=archived["id"],
+                record_id=archived["material_request_id"],
                 details=(
                     "Archived Supplier Quotation from "
                     f"{archived['supplier_name']}."
@@ -506,7 +538,7 @@ class SupplierQuotationProcess:
                 cursor,
                 user_id=self._get_user_id(current_user),
                 module=ActivityLogger.MODULE_QUOTATION,
-                record_id=restored["id"],
+                record_id=restored["material_request_id"],
                 details=(
                     "Restored Supplier Quotation from "
                     f"{restored['supplier_name']}."
@@ -568,7 +600,7 @@ class SupplierQuotationProcess:
                     user_id=self._get_user_id(current_user),
                     action="DELETE",
                     module=ActivityLogger.MODULE_QUOTATION,
-                    record_id=quotation["id"],
+                    record_id=quotation["material_request_id"],
                     details=(
                         "Permanently deleted archived Supplier "
                         f"Quotation from {quotation['supplier_name']}."

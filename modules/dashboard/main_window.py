@@ -585,6 +585,7 @@ class MainWindow(ctk.CTk):
     def show_existing_material_request(
         self,
         material_request_id,
+        initial_tab=None,
     ):
         self.set_active_navigation(
             "quotation"
@@ -602,6 +603,7 @@ class MainWindow(ctk.CTk):
             on_open_clarification=(
                 self.show_clarification_details
             ),
+            initial_tab=initial_tab,
         )
 
     def show_edit_material_request(
@@ -864,6 +866,9 @@ class MainWindow(ctk.CTk):
             self.route_notification(
                 entity_type,
                 entity_id,
+                notification_type=notification.get(
+                    "notification_type"
+                ),
             )
 
         except Exception as error:
@@ -884,6 +889,7 @@ class MainWindow(ctk.CTk):
         self,
         entity_type,
         entity_id,
+        notification_type=None,
     ):
         """
         Route a notification to its related application record.
@@ -910,8 +916,25 @@ class MainWindow(ctk.CTk):
             material_request_entity,
             "material_request",
         }:
+            normalized_notification_type = str(
+                notification_type or ""
+            ).strip().upper()
+
+            supplier_quotation_notifications = {
+                "SUPPLIER_QUOTATION_CREATED",
+                "SUPPLIER_QUOTATION_FILES_UPLOADED",
+            }
+
+            initial_tab = (
+                "Supplier Quotations"
+                if normalized_notification_type
+                in supplier_quotation_notifications
+                else None
+            )
+
             self.show_existing_material_request(
-                entity_id
+                entity_id,
+                initial_tab=initial_tab,
             )
             return
 
@@ -1449,8 +1472,8 @@ class MainWindow(ctk.CTk):
         if label is not None:
             label.configure(
                 text=(
-                    "● System Online   |   "
-                    "PostgreSQL Connected   |   "
+                    "● Connection Interrupted   |   "
+                    "PostgreSQL Unavailable   |   "
                     "Real-Time Reconnecting   |   "
                     f"Version {settings.APP_VERSION}"
                 ),

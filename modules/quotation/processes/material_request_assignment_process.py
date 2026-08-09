@@ -13,6 +13,7 @@ MaterialRequestAssignmentService.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -49,6 +50,66 @@ class MaterialRequestAssignmentProcess:
         )
         self._transaction_factory = (
             transaction_factory or TransactionManager
+        )
+
+    @staticmethod
+    def _ensure_assignment_not_blocked_by_lock(
+        cursor,
+        material_request_id,
+        current_user,
+    ) -> None:
+        """
+        Block assignment/reassignment while another user owns an
+        active Material Request edit lock.
+
+        The Material Request row is locked FOR UPDATE so the lock check
+        and the assignment operation are serialized in one transaction.
+        """
+        cursor.execute(
+            """
+            SELECT
+                mr.locked_by,
+                mr.lock_expires_at,
+                u.full_name
+            FROM quotation.material_requests mr
+            LEFT JOIN core.users u
+                ON mr.locked_by = u.id
+            WHERE mr.id = %s
+            FOR UPDATE OF mr
+            """,
+            (material_request_id,),
+        )
+
+        row = cursor.fetchone()
+
+        if row is None:
+            raise ValueError("Material Request not found.")
+
+        locked_by, lock_expires_at, locked_by_name = row
+
+        if not locked_by:
+            return
+
+        # Expired locks do not block assignment/reassignment.
+        if (
+            lock_expires_at is not None
+            and lock_expires_at <= datetime.now()
+        ):
+            return
+
+        current_user_id = str(
+            (current_user or {}).get("id") or ""
+        )
+
+        if str(locked_by) == current_user_id:
+            return
+
+        owner = locked_by_name or "another user"
+
+        raise ValueError(
+            "This Material Request is currently being edited "
+            f"by {owner}. Assignment or reassignment is unavailable "
+            "until the edit session is completed."
         )
 
     def assign(
@@ -91,6 +152,12 @@ class MaterialRequestAssignmentProcess:
                 raise ValueError(
                     "Material Request number is unavailable."
                 )
+
+            self._ensure_assignment_not_blocked_by_lock(
+                cursor,
+                material_request_id,
+                current_user,
+            )
 
             assignment_id = self._assignment_service.assign(
                 material_request_id=material_request_id,
@@ -204,6 +271,29 @@ class MaterialRequestAssignmentProcess:
             assignment UUID, and updated Material Request record.
         """
         with self._transaction_factory() as cursor:
+            current_assignment = self._assignment_service.get_by_id(
+                assignment_id,
+                cursor=cursor,
+            )
+
+            if current_assignment is None:
+                raise ValueError("Assignment not found.")
+
+            material_request_id = current_assignment.get(
+                "material_request_id"
+            )
+
+            if material_request_id is None:
+                raise ValueError(
+                    "Assignment has no Material Request ID."
+                )
+
+            self._ensure_assignment_not_blocked_by_lock(
+                cursor,
+                material_request_id,
+                current_user,
+            )
+
             closed_assignment = self._assignment_service.reassign(
                 assignment_id=assignment_id,
                 current_user=current_user,
@@ -211,13 +301,18 @@ class MaterialRequestAssignmentProcess:
                 cursor=cursor,
             )
 
-            material_request_id = closed_assignment.get(
+            closed_material_request_id = closed_assignment.get(
                 "material_request_id"
             )
 
-            if material_request_id is None:
+            if closed_material_request_id is None:
                 raise ValueError(
                     "Reassigned assignment has no Material Request ID."
+                )
+
+            if str(closed_material_request_id) != str(material_request_id):
+                raise ValueError(
+                    "Assignment Material Request changed unexpectedly."
                 )
 
             material_request = self._material_request_repository.get_by_id(

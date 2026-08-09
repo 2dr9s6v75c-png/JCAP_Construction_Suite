@@ -59,6 +59,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         on_edit=None,
         on_record_clarification=None,
         on_open_clarification=None,
+        initial_tab=None,
     ):
         super().__init__(
             parent,
@@ -77,6 +78,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.on_open_clarification = (
             on_open_clarification
         )
+        self.initial_tab = initial_tab
 
         self.request = get_material_request(
             material_request_id
@@ -348,6 +350,16 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.build_activity_tab(
             activity_parent
         )
+
+        if self.initial_tab:
+            try:
+                self.tabview.set(
+                    self.initial_tab
+                )
+            except Exception:
+                pass
+
+            self.initial_tab = None
 
     # ============================================================
     # TAB SECTIONS

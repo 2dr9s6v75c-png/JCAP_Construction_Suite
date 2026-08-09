@@ -7,13 +7,19 @@ from config import settings
 psycopg2.extras.register_uuid()
 
 
-def get_connection():
+def get_connection(**overrides):
+    connection_options = {
+        "host": settings.DB_HOST,
+        "port": settings.DB_PORT,
+        "dbname": settings.DB_NAME,
+        "user": settings.DB_USER,
+        "password": settings.DB_PASSWORD,
+    }
+
+    connection_options.update(overrides)
+
     return psycopg2.connect(
-        host=settings.DB_HOST,
-        port=settings.DB_PORT,
-        dbname=settings.DB_NAME,
-        user=settings.DB_USER,
-        password=settings.DB_PASSWORD,
+        **connection_options
     )
 
 
