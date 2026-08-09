@@ -513,11 +513,13 @@ def lock_material_request(material_request_id: str, user: dict):
                 locked_by = %s,
                 locked_at = CURRENT_TIMESTAMP,
                 lock_expires_at =
-                    CURRENT_TIMESTAMP + INTERVAL '30 minutes'
+                    CURRENT_TIMESTAMP
+                    + (%s * INTERVAL '1 minute')
             WHERE id = %s
             """,
             (
                 user["id"],
+                LOCK_TIMEOUT_MINUTES,
                 material_request_id,
             ),
         )
@@ -687,6 +689,7 @@ def get_material_request_lock_status(material_request_id: str):
             LEFT JOIN core.users u
                 ON mr.locked_by = u.id
             WHERE mr.id = %s
+            FOR UPDATE OF mr
             """,
             (material_request_id,),
         )
@@ -713,6 +716,19 @@ def get_material_request_lock_status(material_request_id: str):
             and lock_expires_at
             and lock_expires_at <= now
         ):
+            cur.execute(
+                """
+                UPDATE quotation.material_requests
+                SET
+                    locked_by = NULL,
+                    locked_at = NULL,
+                    lock_expires_at = NULL
+                WHERE id = %s
+                """,
+                (material_request_id,),
+            )
+            conn.commit()
+
             return {
                 "locked": False,
                 "locked_by": None,
@@ -740,6 +756,10 @@ def get_material_request_lock_status(material_request_id: str):
             "lock_expires_at": lock_expires_at,
         }
 
+    except Exception:
+        conn.rollback()
+        raise
+
     finally:
         cur.close()
         conn.close()
@@ -760,6 +780,70 @@ def update_material_request(
     try:
         cur.execute(
             """
+            SELECT
+                mr.mr_number,
+                mr.project_id,
+                mr.site_id,
+                p.project_code,
+                p.project_name
+            FROM quotation.material_requests mr
+            JOIN master.projects p
+                ON mr.project_id = p.id
+            WHERE mr.id = %s
+            FOR UPDATE
+            """,
+            (material_request_id,),
+        )
+
+        existing = cur.fetchone()
+
+        if not existing:
+            raise ValueError("Material Request not found.")
+
+        (
+            mr_number,
+            existing_project_id,
+            existing_site_id,
+            project_code,
+            project_name,
+        ) = existing
+
+        project_id = data.get(
+            "project_id",
+            existing_project_id,
+        )
+        site_id = data.get(
+            "site_id",
+            existing_site_id,
+        )
+
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM master.sites s
+                JOIN master.projects p
+                    ON p.id = s.project_id
+                WHERE s.id = %s
+                  AND s.project_id = %s
+                  AND s.is_active = TRUE
+                  AND p.is_active = TRUE
+            )
+            """,
+            (
+                site_id,
+                project_id,
+            ),
+        )
+
+        if not cur.fetchone()[0]:
+            raise ValueError(
+                "The selected active Site does not belong to "
+                "the selected active Project."
+            )
+
+        cur.execute(
+            """
             UPDATE quotation.material_requests
             SET
                 material_request_description = %s,
@@ -770,7 +854,6 @@ def update_material_request(
                 remarks = %s,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
-            RETURNING mr_number
             """,
             (
                 data["material_request_description"],
@@ -783,13 +866,6 @@ def update_material_request(
             ),
         )
 
-        result = cur.fetchone()
-
-        if not result:
-            raise ValueError("Material Request not found.")
-
-        mr_number = result[0]
-
         ActivityLogger.log_update(
             cur,
             user_id=user["id"],
@@ -797,6 +873,59 @@ def update_material_request(
             record_id=material_request_id,
             details=f"Updated Material Request {mr_number}",
         )
+
+        new_attachments = data.get("attachments", [])
+
+        if new_attachments:
+            saved_files = copy_attachments_to_request_folder(
+                attachments=new_attachments,
+                project_code=data.get(
+                    "project_code",
+                    project_code,
+                ),
+                project_name=data.get(
+                    "project_name",
+                    project_name,
+                ),
+                request_no=mr_number,
+            )
+
+            for file_data in saved_files:
+                cur.execute(
+                    """
+                    INSERT INTO quotation.material_request_attachments (
+                        material_request_id,
+                        original_filename,
+                        stored_filename,
+                        file_extension,
+                        file_size,
+                        relative_module,
+                        uploaded_by
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        material_request_id,
+                        file_data["original_filename"],
+                        file_data["stored_filename"],
+                        file_data["file_extension"],
+                        file_data["file_size"],
+                        file_data["relative_module"],
+                        user["id"],
+                    ),
+                )
+
+                ActivityLogger.log_update(
+                    cur,
+                    user_id=user["id"],
+                    module=ActivityLogger.MODULE_QUOTATION,
+                    record_id=material_request_id,
+                    details=(
+                        "Added attachment "
+                        f"{file_data['original_filename']} "
+                        f"to Material Request {mr_number}"
+                    ),
+                )
 
         conn.commit()
         return mr_number

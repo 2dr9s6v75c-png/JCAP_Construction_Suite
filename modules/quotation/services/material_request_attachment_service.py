@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from core.security.permissions import PermissionService
+from core.security.ownership_service import OwnershipService
 from core.services.base_service import BaseService
 from modules.quotation.repositories.material_request_attachment_repository import (
     MaterialRequestAttachmentRepository,
@@ -158,11 +158,15 @@ class MaterialRequestAttachmentService(BaseService):
         )
         current_user = self.require_user(current_user)
         uploaded_by = self.get_user_uuid(current_user)
-        self._require_edit_permission(current_user)
 
-        self._require_material_request(
+        material_request = self._require_material_request(
             normalized_mr_id,
             cursor=cursor,
+        )
+
+        self._require_upload_permission(
+            current_user,
+            material_request,
         )
 
         created = self._repository.create_attachment(
@@ -203,16 +207,21 @@ class MaterialRequestAttachmentService(BaseService):
             "Material Request Attachment ID",
         )
         current_user = self.require_user(current_user)
-        self._require_edit_permission(current_user)
 
         existing = self.require_by_id(
             normalized_id,
             cursor=cursor,
         )
 
-        self._require_material_request(
+        material_request = self._require_material_request(
             existing["material_request_id"],
             cursor=cursor,
+        )
+
+        self._require_delete_permission(
+            current_user,
+            material_request,
+            existing,
         )
 
         affected_rows = self._repository.delete_attachment(
@@ -327,13 +336,42 @@ class MaterialRequestAttachmentService(BaseService):
     # ========================================================
 
     @staticmethod
-    def _require_edit_permission(
+    def _require_upload_permission(
         current_user: dict[str, Any],
+        material_request: dict[str, Any],
     ) -> None:
+        """
+        Enforce attachment-upload ownership for this specific MR.
+        """
         MaterialRequestAttachmentService.require_permission(
-            lambda: PermissionService.can_edit_material_request(
-                current_user
+            lambda: OwnershipService.can_upload_material_request_documents(
+                current_user,
+                material_request,
             ),
-            "You do not have permission to manage "
-            "Material Request attachments.",
+            "You do not have permission to upload attachments "
+            "to this Material Request.",
+        )
+
+    @staticmethod
+    def _require_delete_permission(
+        current_user: dict[str, Any],
+        material_request: dict[str, Any],
+        attachment: dict[str, Any],
+    ) -> None:
+        """
+        Enforce attachment-level delete ownership.
+
+        The assigned Purchasing Officer may delete attachments on the
+        assigned MR. The Engineering requester may delete only attachments
+        they personally uploaded. Other exceptions remain centralized in
+        OwnershipService.
+        """
+        MaterialRequestAttachmentService.require_permission(
+            lambda: OwnershipService.can_delete_attachment(
+                current_user,
+                material_request,
+                attachment,
+            ),
+            "You do not have permission to delete this "
+            "Material Request attachment.",
         )

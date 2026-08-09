@@ -3,7 +3,7 @@ from datetime import date, datetime
 import customtkinter as ctk
 
 
-class ActivityTab(ctk.CTkFrame):
+class ActivityTab(ctk.CTkScrollableFrame):
     def __init__(self, parent, activities=None):
         super().__init__(
             parent,

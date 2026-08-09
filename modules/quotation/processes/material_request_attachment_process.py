@@ -152,15 +152,36 @@ class MaterialRequestAttachmentProcess:
                     cursor=cursor,
                 )
 
+                uploaded_filenames = [
+                    str(record.get("original_filename") or "").strip()
+                    for record in records
+                    if str(record.get("original_filename") or "").strip()
+                ]
+
+                if len(uploaded_filenames) == 1:
+                    activity_details = (
+                        f"Uploaded attachment "
+                        f"{uploaded_filenames[0]} to Material Request "
+                        f"{storage_context['request_no']}."
+                    )
+                elif uploaded_filenames:
+                    activity_details = (
+                        f"Uploaded {len(uploaded_filenames)} attachments to "
+                        f"Material Request {storage_context['request_no']}: "
+                        f"{', '.join(uploaded_filenames)}."
+                    )
+                else:
+                    activity_details = (
+                        f"Uploaded {len(records)} attachment(s) to "
+                        f"Material Request {storage_context['request_no']}."
+                    )
+
                 ActivityLogger.log_update(
                     cursor,
                     user_id=self._get_user_id(current_user),
                     module=ActivityLogger.MODULE_QUOTATION,
                     record_id=material_request["id"],
-                    details=(
-                        f"Uploaded {len(records)} attachment(s) to "
-                        f"Material Request {storage_context['request_no']}."
-                    ),
+                    details=activity_details,
                 )
 
                 return records

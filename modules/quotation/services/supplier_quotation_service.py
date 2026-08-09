@@ -15,10 +15,13 @@ from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
-from core.security.permissions import PermissionService
+from core.security.ownership_service import OwnershipService
 from core.services.base_service import BaseService
 from modules.quotation.repositories.supplier_quotation_repository import (
     SupplierQuotationRepository,
+)
+from modules.quotation.repositories.material_request_repository import (
+    MaterialRequestRepository,
 )
 
 
@@ -45,8 +48,12 @@ class SupplierQuotationService(BaseService):
     def __init__(
         self,
         repository: SupplierQuotationRepository | None = None,
+        material_request_repository: MaterialRequestRepository | None = None,
     ) -> None:
         self._repository = repository or SupplierQuotationRepository()
+        self._material_request_repository = (
+            material_request_repository or MaterialRequestRepository()
+        )
 
     def get_by_id(
         self,
@@ -173,7 +180,16 @@ class SupplierQuotationService(BaseService):
         )
         current_user = self.require_user(current_user)
         created_by = self.get_user_uuid(current_user)
-        self._require_create_permission(current_user)
+
+        material_request = self._require_material_request(
+            material_request_id,
+            cursor=cursor,
+        )
+        self._require_manage_permission(
+            current_user,
+            material_request,
+            "create Supplier Quotations",
+        )
 
         created = self._repository.create_supplier_quotation(
             material_request_id=material_request_id,
@@ -207,7 +223,6 @@ class SupplierQuotationService(BaseService):
         )
         current_user = self.require_user(current_user)
         updated_by = self.get_user_uuid(current_user)
-        self._require_edit_permission(current_user)
 
         existing = self.require_record(
             self._repository.get_supplier_quotation(
@@ -215,6 +230,15 @@ class SupplierQuotationService(BaseService):
                 cursor=cursor,
             ),
             "Supplier Quotation",
+        )
+        material_request = self._require_material_request(
+            existing["material_request_id"],
+            cursor=cursor,
+        )
+        self._require_manage_permission(
+            current_user,
+            material_request,
+            "modify Supplier Quotations",
         )
         self._require_not_archived(existing)
 
@@ -246,7 +270,6 @@ class SupplierQuotationService(BaseService):
         )
         current_user = self.require_user(current_user)
         updated_by = self.get_user_uuid(current_user)
-        self._require_edit_permission(current_user)
 
         existing = self.require_record(
             self._repository.get_supplier_quotation(
@@ -254,6 +277,15 @@ class SupplierQuotationService(BaseService):
                 cursor=cursor,
             ),
             "Supplier Quotation",
+        )
+        material_request = self._require_material_request(
+            existing["material_request_id"],
+            cursor=cursor,
+        )
+        self._require_manage_permission(
+            current_user,
+            material_request,
+            "change Supplier Quotation status",
         )
         self._require_not_archived(existing)
         normalized_status = self._validate_status(status)
@@ -283,7 +315,6 @@ class SupplierQuotationService(BaseService):
         )
         current_user = self.require_user(current_user)
         updated_by = self.get_user_uuid(current_user)
-        self._require_archive_permission(current_user)
 
         existing = self.require_record(
             self._repository.get_supplier_quotation(
@@ -292,6 +323,16 @@ class SupplierQuotationService(BaseService):
             ),
             "Supplier Quotation",
         )
+        material_request = self._require_material_request(
+            existing["material_request_id"],
+            cursor=cursor,
+        )
+        self._require_manage_permission(
+            current_user,
+            material_request,
+            "archive Supplier Quotations",
+        )
+
         if bool(existing.get("is_archived")):
             raise ValueError(
                 "This Supplier Quotation is already archived."
@@ -317,7 +358,6 @@ class SupplierQuotationService(BaseService):
         )
         current_user = self.require_user(current_user)
         updated_by = self.get_user_uuid(current_user)
-        self._require_restore_permission(current_user)
 
         existing = self.require_record(
             self._repository.get_supplier_quotation(
@@ -326,6 +366,16 @@ class SupplierQuotationService(BaseService):
             ),
             "Supplier Quotation",
         )
+        material_request = self._require_material_request(
+            existing["material_request_id"],
+            cursor=cursor,
+        )
+        self._require_manage_permission(
+            current_user,
+            material_request,
+            "restore Supplier Quotations",
+        )
+
         if not bool(existing.get("is_archived")):
             raise ValueError(
                 "Only archived Supplier Quotations can be restored."
@@ -350,7 +400,6 @@ class SupplierQuotationService(BaseService):
             "Supplier Quotation ID",
         )
         current_user = self.require_user(current_user)
-        self._require_delete_permission(current_user)
 
         existing = self.require_record(
             self._repository.get_supplier_quotation(
@@ -359,6 +408,16 @@ class SupplierQuotationService(BaseService):
             ),
             "Supplier Quotation",
         )
+        material_request = self._require_material_request(
+            existing["material_request_id"],
+            cursor=cursor,
+        )
+        self._require_manage_permission(
+            current_user,
+            material_request,
+            "permanently delete Supplier Quotations",
+        )
+
         if not bool(existing.get("is_archived")):
             raise ValueError(
                 "A Supplier Quotation must be archived before "
@@ -438,7 +497,6 @@ class SupplierQuotationService(BaseService):
         )
         current_user = self.require_user(current_user)
         uploaded_by = self.get_user_uuid(current_user)
-        self._require_edit_permission(current_user)
 
         quotation = self.require_record(
             self._repository.get_supplier_quotation(
@@ -446,6 +504,15 @@ class SupplierQuotationService(BaseService):
                 cursor=cursor,
             ),
             "Supplier Quotation",
+        )
+        material_request = self._require_material_request(
+            quotation["material_request_id"],
+            cursor=cursor,
+        )
+        self._require_manage_permission(
+            current_user,
+            material_request,
+            "upload Supplier Quotation files",
         )
         self._require_not_archived(quotation)
 
@@ -498,7 +565,6 @@ class SupplierQuotationService(BaseService):
             "Supplier Quotation File ID",
         )
         current_user = self.require_user(current_user)
-        self._require_edit_permission(current_user)
 
         existing = self.require_record(
             self._repository.get_supplier_quotation_file(
@@ -514,6 +580,15 @@ class SupplierQuotationService(BaseService):
             ),
             "Supplier Quotation",
         )
+        material_request = self._require_material_request(
+            quotation["material_request_id"],
+            cursor=cursor,
+        )
+        self._require_manage_permission(
+            current_user,
+            material_request,
+            "delete Supplier Quotation files",
+        )
         self._require_not_archived(quotation)
 
         affected_rows = self._repository.delete_supplier_quotation_file(
@@ -525,6 +600,21 @@ class SupplierQuotationService(BaseService):
                 "Supplier Quotation File metadata could not be deleted."
             )
         return existing
+
+    def _require_material_request(
+        self,
+        material_request_id: UUID | str,
+        *,
+        cursor=None,
+    ) -> dict[str, Any]:
+        material_request = self._material_request_repository.get_by_id(
+            material_request_id,
+            cursor=cursor,
+        )
+        return self.require_record(
+            material_request,
+            "Material Request",
+        )
 
     def _validate_supplier_name(self, value: Any) -> str:
         supplier_name = self.require_non_empty_string(
@@ -721,57 +811,25 @@ class SupplierQuotationService(BaseService):
             )
 
     @staticmethod
-    def _require_create_permission(
+    def _require_manage_permission(
         current_user: dict[str, Any],
+        material_request: dict[str, Any],
+        action_description: str,
     ) -> None:
-        SupplierQuotationService.require_permission(
-            lambda: PermissionService.can_edit_material_request(
-                current_user
-            ),
-            "You do not have permission to create Supplier Quotations.",
-        )
+        """
+        Enforce Phase 1 Supplier Quotation ownership.
 
-    @staticmethod
-    def _require_edit_permission(
-        current_user: dict[str, Any],
-    ) -> None:
+        Only the operational owner of the Material Request may create,
+        modify, archive, restore, delete, or manage files for Supplier
+        Quotations, subject to the user's RBAC permissions.
+        """
         SupplierQuotationService.require_permission(
-            lambda: PermissionService.can_edit_material_request(
-                current_user
+            lambda: OwnershipService.can_manage_supplier_quotations(
+                current_user,
+                material_request,
             ),
-            "You do not have permission to modify Supplier Quotations.",
-        )
-
-    @staticmethod
-    def _require_archive_permission(
-        current_user: dict[str, Any],
-    ) -> None:
-        SupplierQuotationService.require_permission(
-            lambda: PermissionService.can_archive_material_request(
-                current_user
+            (
+                "You do not have permission to "
+                f"{action_description} for this Material Request."
             ),
-            "You do not have permission to archive Supplier Quotations.",
-        )
-
-    @staticmethod
-    def _require_restore_permission(
-        current_user: dict[str, Any],
-    ) -> None:
-        SupplierQuotationService.require_permission(
-            lambda: PermissionService.can_restore_material_request(
-                current_user
-            ),
-            "You do not have permission to restore Supplier Quotations.",
-        )
-
-    @staticmethod
-    def _require_delete_permission(
-        current_user: dict[str, Any],
-    ) -> None:
-        SupplierQuotationService.require_permission(
-            lambda: PermissionService.can_archive_material_request(
-                current_user
-            ),
-            "You do not have permission to permanently delete "
-            "Supplier Quotations.",
         )
