@@ -4,6 +4,7 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
+from core.components.date_picker import DatePicker
 from modules.master_data.projects.project_service import ProjectService
 from modules.master_data.sites.site_service import SiteService
 from modules.quotation.components.request_toolbar import RequestToolbar
@@ -186,9 +187,9 @@ class MaterialRequestView(ctk.CTkFrame):
         )
         self.priority_option.set("Medium")
 
-        self.due_date_entry = self.add_field(
+        self.due_date_entry = self.add_date_field(
             section,
-            "Due Date (YYYY-MM-DD)",
+            "Due Date",
             5,
             3,
         )
@@ -425,6 +426,45 @@ class MaterialRequestView(ctk.CTkFrame):
         entry = ctk.CTkEntry(wrapper, height=36)
         entry.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         return entry
+
+    def add_date_field(
+        self,
+        parent,
+        label,
+        row,
+        column,
+        columnspan=1,
+    ):
+        wrapper = ctk.CTkFrame(parent, fg_color="transparent")
+        wrapper.grid(
+            row=row,
+            column=column,
+            columnspan=columnspan,
+            sticky="ew",
+            padx=15,
+            pady=8,
+        )
+        wrapper.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            wrapper,
+            text=label,
+            font=("Segoe UI", 12, "bold"),
+            text_color="#111827",
+        ).grid(row=0, column=0, sticky="w")
+
+        picker = DatePicker(
+            wrapper,
+            placeholder_text="YYYY-MM-DD",
+            height=36,
+        )
+        picker.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(4, 0),
+        )
+        return picker
 
     def add_textbox(
         self,

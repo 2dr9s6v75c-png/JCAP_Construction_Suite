@@ -17,6 +17,7 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
+from core.components.date_picker import DatePicker
 from modules.quotation.components.supplier_quotation_file_panel import (
     SupplierQuotationFilePanel,
 )
@@ -329,11 +330,12 @@ class SupplierQuotationsTab(ctk.CTkFrame):
             padx=5,
         )
 
-        date_from_entry = ctk.CTkEntry(
+        date_from_entry = DatePicker(
             filters,
-            textvariable=self.date_from_var,
+            variable=self.date_from_var,
             placeholder_text="From date",
             height=34,
+            command=lambda _value: self.apply_filters(),
         )
         date_from_entry.grid(
             row=0,
@@ -346,11 +348,12 @@ class SupplierQuotationsTab(ctk.CTkFrame):
             lambda _event: self.apply_filters(),
         )
 
-        date_to_entry = ctk.CTkEntry(
+        date_to_entry = DatePicker(
             filters,
-            textvariable=self.date_to_var,
+            variable=self.date_to_var,
             placeholder_text="To date",
             height=34,
+            command=lambda _value: self.apply_filters(),
         )
         date_to_entry.grid(
             row=0,

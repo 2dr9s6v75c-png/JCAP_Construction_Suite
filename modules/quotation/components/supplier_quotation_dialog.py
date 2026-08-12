@@ -5,6 +5,7 @@ from typing import Any
 
 import customtkinter as ctk
 
+from core.components.date_picker import DatePicker
 from modules.master_data.common.master_form_base import MasterFormBase
 from modules.quotation.services.supplier_quotation_service import (
     DEFAULT_SUPPLIER_QUOTATION_STATUS,
@@ -152,13 +153,18 @@ class SupplierQuotationDialog(MasterFormBase):
             padx=(0, 6),
         )
 
-        self.quotation_date_entry = self.add_entry(
+        self.quotation_date_entry = DatePicker(
             container,
-            row=row,
             variable=self.quotation_date_var,
             placeholder_text="YYYY-MM-DD",
+            height=38,
+        )
+        self.quotation_date_entry.grid(
+            row=row,
             column=1,
+            sticky="ew",
             padx=(6, 0),
+            pady=(0, 14),
         )
         row += 1
 
