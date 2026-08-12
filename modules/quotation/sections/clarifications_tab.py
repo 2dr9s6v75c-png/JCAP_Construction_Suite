@@ -277,3 +277,12 @@ class ClarificationsTab(ctk.CTkFrame):
             )
 
         return str(value or "")
+    def set_data(self, clarifications, can_record=None):
+        self.clarifications = list(clarifications or [])
+        if can_record is not None:
+            self.can_record = bool(can_record)
+
+        for widget in self.winfo_children():
+            widget.destroy()
+
+        self.build_ui()

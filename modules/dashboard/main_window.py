@@ -16,6 +16,10 @@ from core.realtime.realtime_listener import RealtimeListener
 from core.security.permissions import PermissionService
 from core.theme import JCAPTheme
 
+from modules.dashboard.views.dashboard_view import (
+    DashboardView,
+)
+
 from modules.administration.views.administration_view import (
     AdministrationView,
 )
@@ -425,8 +429,11 @@ class MainWindow(ctk.CTk):
             "dashboard"
         )
 
-        self.clear_workspace()
-        self.build_dashboard()
+        self.navigation.navigate(
+            DashboardView,
+            self.user,
+            on_open_request=self.show_existing_material_request,
+        )
 
     def build_dashboard(self):
         self.workspace.grid_columnconfigure(

@@ -239,21 +239,23 @@ class DetailsHeader(ctk.CTkFrame):
             )
 
         else:
+            # Restore active controls in dependency-safe order.
+            # Archive must exist before Assignment can pack before it.
             if self.restore_button.winfo_manager():
                 self.restore_button.pack_forget()
-
-            if not self.assignment_button.winfo_manager():
-                self.assignment_button.pack(
-                    side="left",
-                    padx=5,
-                    before=self.archive_button,
-                )
 
             if not self.archive_button.winfo_manager():
                 self.archive_button.pack(
                     side="left",
                     padx=5,
                     before=self.edit_button,
+                )
+
+            if not self.assignment_button.winfo_manager():
+                self.assignment_button.pack(
+                    side="left",
+                    padx=5,
+                    before=self.archive_button,
                 )
 
             self.edit_button.configure(

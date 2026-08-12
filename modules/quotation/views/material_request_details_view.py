@@ -109,6 +109,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
         self.supplier_quotations = []
         self.supplier_quotations_section = None
+        self.information_section = None
+        self.attachments_section = None
+        self.clarifications_section = None
+        self.activity_section = None
 
         self.header = None
         self.summary = None
@@ -448,10 +452,12 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 },
             ]
 
-        section = InformationTab(
+        self.information_section = InformationTab(
             parent,
             fields=fields,
         )
+
+        section = self.information_section
 
         section.grid(
             row=0,
@@ -472,7 +478,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         )
 
     def build_attachments_tab(self, parent):
-        section = AttachmentsTab(
+        self.attachments_section = AttachmentsTab(
             parent,
             material_request_id=self.material_request_id,
             material_request=self.request,
@@ -481,6 +487,8 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             attachment_process=self.attachment_process,
             on_data_changed=self.handle_attachment_data_changed,
         )
+
+        section = self.attachments_section
 
         section.grid(
             row=0,
@@ -584,13 +592,15 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
         )
 
-        section = ClarificationsTab(
+        self.clarifications_section = ClarificationsTab(
             parent,
             clarifications=self.clarifications,
             can_record=can_record,
             on_record=self.record_supplier_clarification,
             on_open=self.open_clarification,
         )
+
+        section = self.clarifications_section
 
         section.grid(
             row=0,
@@ -609,10 +619,12 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         )
 
     def build_activity_tab(self, parent):
-        section = ActivityTab(
+        self.activity_section = ActivityTab(
             parent,
             activities=self.activities,
         )
+
+        section = self.activity_section
 
         section.grid(
             row=0,
@@ -640,8 +652,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.request["attachments"] = attachments or []
 
         if self.summary:
-            self.summary.destroy()
-            self.build_summary()
+            self.summary.set_value(
+                "Attachments",
+                len(self.request.get("attachments", [])),
+            )
 
     # ============================================================
     # SUPPLIER QUOTATION ACTIONS
@@ -1414,7 +1428,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
             action_text = "assigned"
 
-        self.reload_view_data()
+        self.refresh_view_incrementally()
 
         NotificationService.success(
             (
@@ -1461,6 +1475,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.collaboration_banner = None
         self.tabview = None
         self.supplier_quotations_section = None
+        self.information_section = None
+        self.attachments_section = None
+        self.clarifications_section = None
+        self.activity_section = None
 
         self.build_ui()
 
@@ -1494,9 +1512,11 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             self.material_request_id or ""
         ).strip()
 
-        is_reconciliation = (
-            event_type == "reconciliation_refresh"
-        )
+        if event_type == "reconciliation_refresh":
+            self._schedule_realtime_refresh(
+                full_rebuild=True
+            )
+            return
 
         is_current_material_request = (
             (
@@ -1506,15 +1526,17 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             and entity_id == current_id
         )
 
-        if (
-            not is_reconciliation
-            and not is_current_material_request
-        ):
+        if not is_current_material_request:
             return
 
-        self._schedule_realtime_refresh()
+        self._schedule_realtime_refresh(
+            full_rebuild=False
+        )
 
-    def _schedule_realtime_refresh(self):
+    def _schedule_realtime_refresh(
+        self,
+        full_rebuild=False,
+    ):
         if self._realtime_refresh_after_id is not None:
             try:
                 self.after_cancel(
@@ -1522,6 +1544,10 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 )
             except Exception:
                 pass
+
+        self._pending_full_rebuild = bool(
+            full_rebuild
+        )
 
         self._realtime_refresh_after_id = self.after(
             150,
@@ -1540,7 +1566,17 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             return
 
         try:
-            self.reload_view_data()
+            if getattr(
+                self,
+                "_pending_full_rebuild",
+                False,
+            ):
+                self._pending_full_rebuild = False
+                self.reload_view_data()
+                return
+
+            self.refresh_view_incrementally()
+
         except Exception as error:
             NotificationService.error(
                 (
@@ -1550,6 +1586,198 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 title="Real-Time Refresh",
                 error=error,
             )
+
+    def refresh_view_incrementally(self):
+        new_request = get_material_request(
+            self.material_request_id
+        )
+
+        new_activities = get_material_request_activity(
+            self.material_request_id
+        )
+
+        new_clarifications = (
+            ClarificationService
+            .get_material_request_clarifications(
+                self.material_request_id
+            )
+        )
+
+        self.request = new_request
+        self.activities = new_activities
+        self.clarifications = new_clarifications
+
+        self.load_supplier_quotations(
+            notify_on_error=False
+        )
+
+        self._update_header_state()
+
+        if self.summary:
+            self.summary.set_items(
+                self._summary_items()
+            )
+
+        if self.information_section:
+            self.information_section.set_fields(
+                self._information_fields()
+            )
+
+        if self.attachments_section:
+            self.attachments_section.set_material_request(
+                self.request
+            )
+
+        if self.supplier_quotations_section:
+            self.supplier_quotations_section.set_permissions(
+                can_manage=(
+                    not self.is_archived()
+                    and OwnershipService
+                    .can_manage_supplier_quotations(
+                        self.user,
+                        self.request,
+                    )
+                ),
+                material_request_archived=self.is_archived(),
+            )
+            self.supplier_quotations_section.set_quotations(
+                self.supplier_quotations
+            )
+
+        if self.clarifications_section:
+            self.clarifications_section.set_data(
+                self.clarifications,
+                can_record=(
+                    not self.is_archived()
+                    and OwnershipService
+                    .can_record_supplier_clarification(
+                        self.user,
+                        self.request,
+                    )
+                ),
+            )
+
+        if self.activity_section:
+            self.activity_section.set_activities(
+                self.activities
+            )
+
+        if self.collaboration_banner:
+            self.collaboration_banner.refresh_status()
+
+    def _summary_items(self):
+        if not self.request:
+            return []
+
+        return [
+            {
+                "label": "Project",
+                "value": self.format_project(),
+            },
+            {
+                "label": "Status",
+                "value": self.request.get("status", ""),
+            },
+            {
+                "label": "Priority",
+                "value": self.request.get("priority", ""),
+            },
+            {
+                "label": "Attachments",
+                "value": len(
+                    self.request.get("attachments", [])
+                ),
+            },
+        ]
+
+    def _information_fields(self):
+        if not self.request:
+            return []
+
+        assigned_to_name = (
+            self.request.get("assigned_to_name")
+            or self.request.get("assigned_to_full_name")
+            or "Unassigned"
+        )
+
+        return [
+            {"label": "MR Number", "value": self.request.get("mr_number", "")},
+            {"label": "Project", "value": self.format_project()},
+            {"label": "Client", "value": self.request.get("client_name", "")},
+            {"label": "Location", "value": self.request.get("location", "")},
+            {"label": "Requested By", "value": self.request.get("requested_by", "")},
+            {"label": "Assigned To", "value": assigned_to_name},
+            {
+                "label": "Description",
+                "value": self.request.get(
+                    "material_request_description",
+                    "",
+                ),
+            },
+            {
+                "label": "Due Date",
+                "value": self.format_date(
+                    self.request.get("due_date")
+                ),
+            },
+            {
+                "label": "Created",
+                "value": self.format_datetime(
+                    self.request.get("created_at")
+                ),
+            },
+            {"label": "Remarks", "value": self.request.get("remarks", "")},
+        ]
+
+    def _update_header_state(self):
+        if not self.header:
+            return
+
+        is_archived = self.is_archived()
+        is_assigned = bool(
+            self.request
+            and self.request.get("current_assignment_id")
+        )
+
+        self.header.set_record_state(
+            "archived" if is_archived else "active"
+        )
+        self.header.set_assignment_state(
+            assigned=is_assigned
+        )
+
+        assignment_allowed = (
+            OwnershipService.can_reassign_material_request(
+                self.user,
+                self.request,
+            )
+            if is_assigned
+            else OwnershipService.can_assign_material_request(
+                self.user,
+                self.request,
+            )
+        )
+
+        self.header.set_assignment_enabled(
+            enabled=(
+                not is_archived
+                and assignment_allowed
+            )
+        )
+        self.header.set_archive_enabled(
+            not is_archived
+            and OwnershipService.can_archive_material_request(
+                self.user,
+                self.request,
+            )
+        )
+        self.header.set_edit_enabled(
+            not is_archived
+            and OwnershipService.can_edit_material_request(
+                self.user,
+                self.request,
+            )
+        )
 
     # ============================================================
     # DOCUMENT ACTIONS

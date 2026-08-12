@@ -71,6 +71,7 @@ MATERIAL_REQUEST_WORKFLOW = WorkflowDefinition(
         ),
         MaterialRequestState.ASSIGNED: (
             MaterialRequestState.ACCEPTED,
+            MaterialRequestState.IN_PROGRESS,
             MaterialRequestState.QUEUED,
             MaterialRequestState.ARCHIVED,
         ),

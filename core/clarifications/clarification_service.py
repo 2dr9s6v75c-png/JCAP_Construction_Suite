@@ -9,6 +9,9 @@ from core.notifications.persistent_notification_service import (
 )
 from core.organization.organization_service import OrganizationService
 from core.security.permissions import PermissionService
+from modules.quotation.services.material_request_workflow_service import (
+    MaterialRequestWorkflowService,
+)
 
 
 class ClarificationService:
@@ -193,6 +196,13 @@ class ClarificationService:
                     "The selected Project Engineer must be the "
                     "Engineering requester of the Material Request."
                 )
+
+            MaterialRequestWorkflowService().start_purchasing_work(
+                material_request_id,
+                current_user,
+                trigger="Supplier Clarification created",
+                cursor=cur,
+            )
 
             clarification_id = (
                 ClarificationRepository.create_clarification(
@@ -691,6 +701,13 @@ class ClarificationService:
             ClarificationRepository.resolve(
                 clarification_id,
                 user_id,
+                cursor=cur,
+            )
+
+            MaterialRequestWorkflowService().evaluate_waiting_supplier_quote(
+                clarification["material_request_id"],
+                current_user,
+                trigger="Supplier Clarification resolved",
                 cursor=cur,
             )
 

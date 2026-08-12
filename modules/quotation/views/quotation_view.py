@@ -31,6 +31,10 @@ class QuotationView(ctk.CTkFrame):
         self.all_requests = []
         self.filter_buttons = {}
         self._realtime_refresh_after_id = None
+        self._pending_full_rebuild = False
+
+        self.request_cards = {}
+        self._empty_state_label = None
 
         self.build_ui()
         self.load_requests()
@@ -370,9 +374,30 @@ class QuotationView(ctk.CTkFrame):
     # ============================================================
 
     def render_requests(self):
+        """
+        Render the current search/filter result.
+
+        This method is used for manual search/filter changes and may rebuild
+        the visible list. Normal real-time events use incremental syncing.
+        """
         for widget in self.list_frame.winfo_children():
             widget.destroy()
 
+        self.request_cards = {}
+        self._empty_state_label = None
+
+        filtered = self._get_visible_requests()
+
+        if not filtered:
+            self._show_empty_state()
+            return
+
+        for request in filtered:
+            self.create_request_card(
+                request
+            )
+
+    def _get_visible_requests(self):
         keyword = ""
 
         if hasattr(self, "search_entry"):
@@ -387,82 +412,57 @@ class QuotationView(ctk.CTkFrame):
 
         for request in self.requests:
             searchable_text = " ".join([
-                str(
-                    request.get(
-                        "mr_number",
-                        "",
-                    )
-                ),
-                str(
-                    request.get(
-                        "project_code",
-                        "",
-                    )
-                ),
-                str(
-                    request.get(
-                        "project_name",
-                        "",
-                    )
-                ),
-                str(
-                    request.get(
-                        "description",
-                        "",
-                    )
-                ),
-                str(
-                    request.get(
-                        "requested_by",
-                        "",
-                    )
-                ),
-                str(
-                    request.get(
-                        "assigned_to_name",
-                        "",
-                    )
-                ),
-                str(
-                    request.get(
-                        "priority",
-                        "",
-                    )
-                ),
-                str(
-                    request.get(
-                        "status",
-                        "",
-                    )
-                ),
+                str(request.get("mr_number", "")),
+                str(request.get("project_code", "")),
+                str(request.get("project_name", "")),
+                str(request.get("description", "")),
+                str(request.get("requested_by", "")),
+                str(request.get("assigned_to_name", "")),
+                str(request.get("priority", "")),
+                str(request.get("status", "")),
             ]).lower()
 
             if keyword in searchable_text:
-                filtered.append(
-                    request
-                )
+                filtered.append(request)
 
-        if not filtered:
-            ctk.CTkLabel(
-                self.list_frame,
-                text="No material requests found.",
-                font=("Segoe UI", 14),
-                text_color="#607D8B",
-            ).pack(
-                pady=40
-            )
+        return filtered
 
+    def _show_empty_state(self):
+        if self._empty_state_label is not None:
             return
 
-        for request in filtered:
-            self.create_request_card(
-                request
-            )
+        self._empty_state_label = ctk.CTkLabel(
+            self.list_frame,
+            text="No material requests found.",
+            font=("Segoe UI", 14),
+            text_color="#607D8B",
+        )
+        self._empty_state_label.pack(
+            pady=40
+        )
+
+    def _hide_empty_state(self):
+        if self._empty_state_label is None:
+            return
+
+        try:
+            self._empty_state_label.destroy()
+        except Exception:
+            pass
+
+        self._empty_state_label = None
 
     def create_request_card(
         self,
         request,
     ):
+        request_id = str(
+            request.get("id") or ""
+        )
+
+        if not request_id:
+            return
+
         card = ctk.CTkFrame(
             self.list_frame,
             fg_color="#FFFFFF",
@@ -496,12 +496,12 @@ class QuotationView(ctk.CTkFrame):
             weight=1,
         )
 
-        ctk.CTkLabel(
+        mr_label = ctk.CTkLabel(
             top,
-            text=request["mr_number"],
             font=("Segoe UI", 17, "bold"),
             text_color="#0D47A1",
-        ).grid(
+        )
+        mr_label.grid(
             row=0,
             column=0,
             sticky="w",
@@ -517,34 +517,28 @@ class QuotationView(ctk.CTkFrame):
             sticky="e",
         )
 
-        ctk.CTkLabel(
+        priority_label = ctk.CTkLabel(
             badges,
-            text=request["priority"],
             font=("Segoe UI", 12, "bold"),
             text_color="white",
-            fg_color=self.get_priority_color(
-                request["priority"]
-            ),
             corner_radius=14,
             width=95,
             height=28,
-        ).pack(
+        )
+        priority_label.pack(
             side="left",
             padx=6,
         )
 
-        ctk.CTkLabel(
+        status_label = ctk.CTkLabel(
             badges,
-            text=request["status"],
             font=("Segoe UI", 12, "bold"),
             text_color="white",
-            fg_color=self.get_status_color(
-                request["status"]
-            ),
             corner_radius=14,
             width=95,
             height=28,
-        ).pack(
+        )
+        status_label.pack(
             side="left",
             padx=6,
         )
@@ -566,53 +560,35 @@ class QuotationView(ctk.CTkFrame):
             weight=1,
         )
 
-        self.add_info_row(
+        project_value = self._add_info_row_widgets(
             content,
             0,
             "Project:",
-            self.format_project(request),
         )
-
-        self.add_info_row(
+        description_value = self._add_info_row_widgets(
             content,
             1,
             "Material Request:",
-            request["description"],
         )
-
-        self.add_info_row(
+        requested_by_value = self._add_info_row_widgets(
             content,
             2,
             "Requested By:",
-            request["requested_by"],
         )
-
-        self.add_info_row(
+        assigned_to_value = self._add_info_row_widgets(
             content,
             3,
             "Assigned To:",
-            (
-                request.get("assigned_to_name")
-                or "Unassigned"
-            ),
         )
-
-        self.add_info_row(
+        due_date_value = self._add_info_row_widgets(
             content,
             4,
             "Due Date:",
-            self.format_date(
-                request.get("due_date")
-            ),
         )
-
-        self.add_info_row(
+        created_value = self._add_info_row_widgets(
             content,
             5,
             "Created:",
-            self.format_datetime(
-                request.get("created_at")
-            ),
         )
 
         bottom = ctk.CTkFrame(
@@ -632,26 +608,12 @@ class QuotationView(ctk.CTkFrame):
             weight=1,
         )
 
-        attachment_count = request.get(
-            "attachment_count",
-            0,
-        )
-
-        if attachment_count == 1:
-            attachment_text = (
-                f"📎 {attachment_count} Attachment"
-            )
-        else:
-            attachment_text = (
-                f"📎 {attachment_count} Attachments"
-            )
-
-        ctk.CTkLabel(
+        attachment_label = ctk.CTkLabel(
             bottom,
-            text=attachment_text,
             font=("Segoe UI", 12, "bold"),
             text_color="#607D8B",
-        ).grid(
+        )
+        attachment_label.grid(
             row=0,
             column=0,
             sticky="w",
@@ -664,8 +626,8 @@ class QuotationView(ctk.CTkFrame):
             height=32,
             fg_color="#0D47A1",
             hover_color="#0A2E63",
-            command=lambda r=request: (
-                self.open_request_placeholder(r)
+            command=lambda rid=request_id: (
+                self._open_request_id(rid)
             ),
         ).grid(
             row=0,
@@ -680,14 +642,273 @@ class QuotationView(ctk.CTkFrame):
             height=32,
             fg_color="#607D8B",
             hover_color="#455A64",
-            command=lambda r=request: (
-                self.open_folder_placeholder(r)
+            command=lambda rid=request_id: (
+                self._open_folder_by_id(rid)
             ),
         ).grid(
             row=0,
             column=2,
             padx=5,
         )
+
+        self.request_cards[
+            request_id
+        ] = {
+            "frame": card,
+            "record": {},
+            "mr_label": mr_label,
+            "priority_label": priority_label,
+            "status_label": status_label,
+            "project_value": project_value,
+            "description_value": description_value,
+            "requested_by_value": requested_by_value,
+            "assigned_to_value": assigned_to_value,
+            "due_date_value": due_date_value,
+            "created_value": created_value,
+            "attachment_label": attachment_label,
+        }
+
+        self._update_request_card(
+            request_id,
+            request,
+            force=True,
+        )
+
+    def _add_info_row_widgets(
+        self,
+        parent,
+        row,
+        label,
+    ):
+        ctk.CTkLabel(
+            parent,
+            text=label,
+            font=("Segoe UI", 12, "bold"),
+            text_color="#607D8B",
+            width=120,
+            anchor="w",
+        ).grid(
+            row=row,
+            column=0,
+            sticky="w",
+            pady=2,
+        )
+
+        value_widget = ctk.CTkLabel(
+            parent,
+            text="",
+            font=("Segoe UI", 13),
+            text_color="#111827",
+            anchor="w",
+        )
+        value_widget.grid(
+            row=row,
+            column=1,
+            sticky="w",
+            pady=2,
+        )
+
+        return value_widget
+
+    def _update_request_card(
+        self,
+        request_id,
+        request,
+        *,
+        force=False,
+    ):
+        card = self.request_cards.get(
+            request_id
+        )
+
+        if not card:
+            return
+
+        if (
+            not force
+            and card.get("record") == request
+        ):
+            return
+
+        card["mr_label"].configure(
+            text=request.get("mr_number", "")
+        )
+
+        priority = request.get("priority", "")
+        status = request.get("status", "")
+
+        card["priority_label"].configure(
+            text=priority,
+            fg_color=self.get_priority_color(
+                priority
+            ),
+        )
+
+        card["status_label"].configure(
+            text=status,
+            fg_color=self.get_status_color(
+                status
+            ),
+        )
+
+        card["project_value"].configure(
+            text=self.format_project(
+                request
+            )
+        )
+        card["description_value"].configure(
+            text=str(
+                request.get("description", "")
+                or ""
+            )
+        )
+        card["requested_by_value"].configure(
+            text=str(
+                request.get("requested_by", "")
+                or ""
+            )
+        )
+        card["assigned_to_value"].configure(
+            text=(
+                request.get("assigned_to_name")
+                or "Unassigned"
+            )
+        )
+        card["due_date_value"].configure(
+            text=self.format_date(
+                request.get("due_date")
+            )
+        )
+        card["created_value"].configure(
+            text=self.format_datetime(
+                request.get("created_at")
+            )
+        )
+
+        attachment_count = int(
+            request.get(
+                "attachment_count",
+                0,
+            )
+            or 0
+        )
+
+        attachment_text = (
+            f"📎 {attachment_count} Attachment"
+            if attachment_count == 1
+            else f"📎 {attachment_count} Attachments"
+        )
+
+        card["attachment_label"].configure(
+            text=attachment_text
+        )
+
+        card["record"] = dict(
+            request
+        )
+
+    def _sync_visible_request_cards(
+        self,
+    ):
+        visible = self._get_visible_requests()
+
+        new_ids = {
+            str(request.get("id"))
+            for request in visible
+            if request.get("id")
+        }
+
+        existing_ids = set(
+            self.request_cards.keys()
+        )
+
+        for request_id in (
+            existing_ids - new_ids
+        ):
+            info = self.request_cards.pop(
+                request_id,
+                None,
+            )
+
+            if not info:
+                continue
+
+            try:
+                info["frame"].destroy()
+            except Exception:
+                pass
+
+        for request in visible:
+            request_id = str(
+                request.get("id") or ""
+            )
+
+            if not request_id:
+                continue
+
+            if request_id not in self.request_cards:
+                self.create_request_card(
+                    request
+                )
+            else:
+                self._update_request_card(
+                    request_id,
+                    request,
+                )
+
+        # Reorder without rebuilding.
+        for request in visible:
+            request_id = str(
+                request.get("id") or ""
+            )
+            info = self.request_cards.get(
+                request_id
+            )
+
+            if not info:
+                continue
+
+            try:
+                info["frame"].pack_forget()
+                info["frame"].pack(
+                    fill="x",
+                    padx=10,
+                    pady=8,
+                )
+            except Exception:
+                pass
+
+        if visible:
+            self._hide_empty_state()
+        else:
+            self._show_empty_state()
+
+    def _open_request_id(
+        self,
+        request_id,
+    ):
+        if self.on_open_request:
+            self.on_open_request(
+                request_id
+            )
+
+    def _open_folder_by_id(
+        self,
+        request_id,
+    ):
+        request = next(
+            (
+                item
+                for item in self.all_requests
+                if str(item.get("id")) == str(request_id)
+            ),
+            None,
+        )
+
+        if request is not None:
+            self.open_folder_placeholder(
+                request
+            )
 
     # ============================================================
     # UI HELPERS
@@ -794,24 +1015,31 @@ class QuotationView(ctk.CTkFrame):
             event.get("entity_type") or ""
         ).strip().lower()
 
-        is_reconciliation = (
-            event_type == "reconciliation_refresh"
-        )
+        if event_type == "reconciliation_refresh":
+            self._schedule_realtime_refresh(
+                full_rebuild=True
+            )
+            return
 
         is_material_request_event = (
             entity_type == "material_request"
-            or event_type.startswith("material_request_")
+            or event_type.startswith(
+                "material_request_"
+            )
         )
 
-        if (
-            not is_reconciliation
-            and not is_material_request_event
-        ):
+        if not is_material_request_event:
             return
 
-        self._schedule_realtime_refresh()
+        self._schedule_realtime_refresh(
+            full_rebuild=False
+        )
 
-    def _schedule_realtime_refresh(self):
+    def _schedule_realtime_refresh(
+        self,
+        *,
+        full_rebuild=False,
+    ):
         if self._realtime_refresh_after_id is not None:
             try:
                 self.after_cancel(
@@ -819,6 +1047,10 @@ class QuotationView(ctk.CTkFrame):
                 )
             except Exception:
                 pass
+
+        self._pending_full_rebuild = bool(
+            full_rebuild
+        )
 
         self._realtime_refresh_after_id = self.after(
             150,
@@ -836,7 +1068,42 @@ class QuotationView(ctk.CTkFrame):
         if not exists:
             return
 
-        self.load_requests()
+        if self._pending_full_rebuild:
+            self._pending_full_rebuild = False
+            self.load_requests()
+            return
+
+        self._refresh_requests_incrementally()
+
+    def _refresh_requests_incrementally(self):
+        try:
+            new_all_requests = get_material_requests(
+                "All"
+            )
+
+            new_requests = get_material_requests(
+                self.status_filter
+            )
+
+        except Exception as error:
+            print(
+                "Failed to refresh material requests "
+                "after real-time event:"
+            )
+            print(error)
+            return
+
+        if (
+            new_all_requests == self.all_requests
+            and new_requests == self.requests
+        ):
+            return
+
+        self.all_requests = new_all_requests
+        self.requests = new_requests
+
+        self.update_filter_counts()
+        self._sync_visible_request_cards()
 
     # ============================================================
     # ACTIONS

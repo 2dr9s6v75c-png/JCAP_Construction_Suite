@@ -96,3 +96,15 @@ class ActivityTab(ctk.CTkScrollableFrame):
             return value.strftime("%d %b %Y")
 
         return str(value or "")
+    def set_activities(self, activities):
+        new_activities = list(activities or [])
+
+        if self.activities == new_activities:
+            return
+
+        self.activities = new_activities
+
+        for widget in self.winfo_children():
+            widget.destroy()
+
+        self.build_ui()

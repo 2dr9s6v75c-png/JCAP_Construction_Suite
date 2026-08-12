@@ -1083,6 +1083,30 @@ class SupplierQuotationsTab(ctk.CTkFrame):
         self._render_rows()
         self._highlight_selected_row()
 
+    def set_permissions(
+        self,
+        *,
+        can_manage: bool,
+        material_request_archived: bool,
+    ) -> None:
+        enabled = bool(can_manage)
+        self.can_add = enabled
+        self.can_edit = enabled
+        self.can_archive = enabled
+        self.can_restore = enabled
+        self.can_manage_files = enabled
+        self.material_request_archived = bool(
+            material_request_archived
+        )
+
+        self._update_action_states()
+
+        if self._file_panel is not None:
+            self._file_panel.can_manage = enabled
+            self._file_panel.material_request_archived = bool(
+                material_request_archived
+            )
+
     def refresh_selected_files(self) -> None:
         if self._file_panel is not None:
             self._file_panel.refresh_files(

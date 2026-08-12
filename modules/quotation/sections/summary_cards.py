@@ -9,14 +9,24 @@ class SummaryCards(ctk.CTkFrame):
             corner_radius=14,
         )
 
-        self.items = items or []
+        self.items = list(items or [])
+        self.value_labels = {}
+
         self.build_ui()
 
     def build_ui(self):
-        total_columns = max(len(self.items), 1)
+        self.value_labels = {}
+
+        total_columns = max(
+            len(self.items),
+            1,
+        )
 
         for column in range(total_columns):
-            self.grid_columnconfigure(column, weight=1)
+            self.grid_columnconfigure(
+                column,
+                weight=1,
+            )
 
         if not self.items:
             ctk.CTkLabel(
@@ -32,9 +42,17 @@ class SummaryCards(ctk.CTkFrame):
             )
             return
 
-        for index, item in enumerate(self.items):
-            label = item.get("label", "")
-            value = item.get("value", "")
+        for index, item in enumerate(
+            self.items
+        ):
+            label = item.get(
+                "label",
+                "",
+            )
+            value = item.get(
+                "value",
+                "",
+            )
 
             card = ctk.CTkFrame(
                 self,
@@ -54,12 +72,117 @@ class SummaryCards(ctk.CTkFrame):
                 text=label,
                 font=("Segoe UI", 12, "bold"),
                 text_color="#607D8B",
-            ).pack(pady=(12, 3))
+            ).pack(
+                pady=(12, 3)
+            )
 
-            ctk.CTkLabel(
+            value_label = ctk.CTkLabel(
                 card,
-                text=str(value or ""),
+                text=str(
+                    value
+                    if value not in (
+                        None,
+                        "",
+                    )
+                    else ""
+                ),
                 font=("Segoe UI", 14, "bold"),
                 text_color="#0A2E63",
                 wraplength=260,
-            ).pack(pady=(0, 12))
+            )
+
+            value_label.pack(
+                pady=(0, 12)
+            )
+
+            self.value_labels[
+                str(label)
+            ] = value_label
+
+    def set_value(
+        self,
+        label,
+        value,
+    ):
+        """
+        Update a single summary card without rebuilding
+        the complete SummaryCards widget.
+        """
+        widget = self.value_labels.get(
+            str(label)
+        )
+
+        if widget is None:
+            return
+
+        widget.configure(
+            text=str(
+                value
+                if value not in (
+                    None,
+                    "",
+                )
+                else ""
+            )
+        )
+
+    def set_items(
+        self,
+        items,
+    ):
+        """
+        Update summary values in place whenever the card
+        structure is unchanged.
+
+        A rebuild occurs only if the set/order of card labels
+        itself changes.
+        """
+        new_items = list(
+            items or []
+        )
+
+        old_labels = [
+            str(
+                item.get(
+                    "label",
+                    "",
+                )
+            )
+            for item in self.items
+        ]
+
+        new_labels = [
+            str(
+                item.get(
+                    "label",
+                    "",
+                )
+            )
+            for item in new_items
+        ]
+
+        if old_labels != new_labels:
+            self.items = new_items
+
+            for widget in (
+                self.winfo_children()
+            ):
+                widget.destroy()
+
+            self.value_labels = {}
+            self.build_ui()
+            return
+
+        self.items = new_items
+
+        for item in new_items:
+            self.set_value(
+                item.get(
+                    "label",
+                    "",
+                ),
+                item.get(
+                    "value",
+                    "",
+                ),
+            )

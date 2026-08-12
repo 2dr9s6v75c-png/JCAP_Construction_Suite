@@ -51,3 +51,11 @@ class AttachmentsTab(ctk.CTkFrame):
             padx=10,
             pady=10,
         )
+    def set_material_request(self, material_request):
+        self.material_request = material_request or {}
+        if hasattr(self, "panel") and self.panel is not None:
+            self.panel.material_request = self.material_request
+            if hasattr(self.panel, "refresh"):
+                self.panel.refresh()
+            elif hasattr(self.panel, "refresh_attachments"):
+                self.panel.refresh_attachments()

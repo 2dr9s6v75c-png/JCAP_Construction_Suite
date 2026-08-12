@@ -37,6 +37,9 @@ from modules.quotation.services.supplier_quotation_service import (
     DEFAULT_SUPPLIER_QUOTATION_STATUS,
     SupplierQuotationService,
 )
+from modules.quotation.services.material_request_workflow_service import (
+    MaterialRequestWorkflowService,
+)
 
 
 class SupplierQuotationProcess:
@@ -54,6 +57,9 @@ class SupplierQuotationProcess:
         )
         self._material_request_repository = (
             material_request_repository or MaterialRequestRepository()
+        )
+        self._workflow_service = MaterialRequestWorkflowService(
+            self._material_request_repository
         )
         self._transaction_factory = (
             transaction_factory or TransactionManager
@@ -138,6 +144,20 @@ class SupplierQuotationProcess:
                     quotation_date=quotation_date,
                     remarks=remarks,
                     status=status,
+                    cursor=cursor,
+                )
+
+                self._workflow_service.start_purchasing_work(
+                    material_request["id"],
+                    current_user,
+                    trigger="Supplier Quotation created",
+                    cursor=cursor,
+                )
+
+                self._workflow_service.evaluate_waiting_supplier_quote(
+                    material_request["id"],
+                    current_user,
+                    trigger="Supplier Quotation record created",
                     cursor=cursor,
                 )
 

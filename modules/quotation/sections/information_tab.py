@@ -154,3 +154,6 @@ class InformationTab(ctk.CTkScrollableFrame):
             padx=15,
             pady=(0, 14),
         )
+    def set_fields(self, fields):
+        self.fields = list(fields or [])
+        self.build_fields()
