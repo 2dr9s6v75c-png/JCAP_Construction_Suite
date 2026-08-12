@@ -425,15 +425,56 @@ class MainWindow(ctk.CTk):
     # ============================================================
 
     def show_dashboard(self):
+        """
+        Open the role-appropriate main dashboard.
+
+        Administrators use the existing Administration dashboard so their
+        landing workspace focuses on user and system administration rather
+        than a particular business process. Operational roles continue to
+        use DashboardView unchanged.
+        """
         self.set_active_navigation(
             "dashboard"
         )
+
+        if self.is_administrator():
+            self.navigation.navigate(
+                AdministrationView,
+                self.user,
+                on_users=self.show_user_management,
+                on_roles_permissions=(
+                    self.show_roles_permissions
+                ),
+                on_departments=self.show_departments,
+                on_job_titles=self.show_job_titles,
+            )
+            return
 
         self.navigation.navigate(
             DashboardView,
             self.user,
             on_open_request=self.show_existing_material_request,
         )
+
+    def is_administrator(self):
+        """
+        Return True only for the Administrator system role.
+
+        Permission-based checks are intentionally not used here because a
+        non-Administrator role may be granted administrative permissions
+        without becoming an Administrator dashboard user.
+        """
+        role_name = str(
+            self.user.get("role_name")
+            or self.user.get("role")
+            or ""
+        ).strip().lower()
+
+        return role_name in {
+            "administrator",
+            "system administrator",
+            "admin",
+        }
 
     def build_dashboard(self):
         self.workspace.grid_columnconfigure(
