@@ -1,5 +1,7 @@
 import customtkinter as ctk
 
+from core.components.date_picker import DatePicker
+
 from tkinter import messagebox
 
 from modules.quotation.services.material_request_service import (
@@ -243,15 +245,14 @@ class MaterialRequestEditView(ctk.CTkFrame):
             self.request["priority"]
         )
 
-        self.due_date_entry = self.add_field(
+        self.due_date_entry = self.add_date_field(
             body,
-            "Due Date (YYYY-MM-DD)",
+            "Due Date",
             2,
             1,
         )
-        self.due_date_entry.insert(
-            0,
-            str(self.request["due_date"] or ""),
+        self.due_date_entry.set(
+            self.request["due_date"]
         )
 
         self.remarks_box = self.add_textbox(
@@ -490,6 +491,53 @@ class MaterialRequestEditView(ctk.CTkFrame):
         )
 
         return entry
+
+    def add_date_field(
+        self,
+        parent,
+        label,
+        row,
+        column,
+        columnspan=1,
+    ):
+        wrapper = ctk.CTkFrame(
+            parent,
+            fg_color="transparent",
+        )
+        wrapper.grid(
+            row=row,
+            column=column,
+            columnspan=columnspan,
+            sticky="ew",
+            padx=15,
+            pady=8,
+        )
+        wrapper.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            wrapper,
+            text=label,
+            font=("Segoe UI", 12, "bold"),
+            text_color="#111827",
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+
+        picker = DatePicker(
+            wrapper,
+            placeholder_text="YYYY-MM-DD",
+            height=36,
+        )
+        picker.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(4, 0),
+        )
+
+        return picker
 
     def add_readonly_field(
         self,
