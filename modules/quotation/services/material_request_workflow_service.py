@@ -183,6 +183,16 @@ class MaterialRequestWorkflowService:
             cursor=cursor,
         )
 
+        # Reconcile the next state immediately. Quotation files may
+        # already have been received before the final blocking
+        # clarification is resolved.
+        self.evaluate_completed(
+            mr_id,
+            current_user,
+            trigger=trigger,
+            cursor=cursor,
+        )
+
         return True
 
     # ========================================================
