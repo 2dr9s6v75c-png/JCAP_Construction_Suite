@@ -1,0 +1,15 @@
+# Environment / local configuration
+.env
+
+# Python generated files
+__pycache__/
+*.pyc
+*.pyo
+
+# PyInstaller generated files
+build/
+dist/
+*.spec
+
+# Logs
+*.log
