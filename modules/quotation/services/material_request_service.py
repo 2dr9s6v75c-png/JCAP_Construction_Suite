@@ -10,6 +10,7 @@ from core.notifications.persistent_notification_service import (
 from core.numbering.numbering_service import generate_document_number
 from core.security.permissions import PermissionService
 from core.realtime.realtime_event_service import RealtimeEventService
+from core.workflow.material_request_workflow import MaterialRequestState
 
 
 LOCK_TIMEOUT_MINUTES = 30
@@ -1038,6 +1039,11 @@ def archive_material_request(
         if DocumentLifecycle.is_archived(current_status):
             raise ValueError(
                 "This Material Request is already archived."
+            )
+
+        if current_status != MaterialRequestState.COMPLETED:
+            raise ValueError(
+                "Only Completed Material Requests can be archived."
             )
 
         cur.execute(

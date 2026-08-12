@@ -218,6 +218,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.header.set_archive_enabled(
             (
                 not is_archived
+                and self._is_completed()
                 and OwnershipService
                 .can_archive_material_request(
                     self.user,
@@ -1766,6 +1767,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         )
         self.header.set_archive_enabled(
             not is_archived
+            and self._is_completed()
             and OwnershipService.can_archive_material_request(
                 self.user,
                 self.request,
@@ -1840,6 +1842,16 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                     "already archived."
                 ),
                 title="Already Archived",
+            )
+            return
+
+        if not self._is_completed():
+            NotificationService.warning(
+                (
+                    "Only Completed Material Requests "
+                    "can be archived."
+                ),
+                title="Archive Unavailable",
             )
             return
 
@@ -2062,6 +2074,17 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             self.request.get(
                 "status"
             )
+        )
+
+    def _is_completed(self):
+        if not self.request:
+            return False
+
+        return (
+            str(
+                self.request.get("status") or ""
+            ).strip().lower()
+            == "completed"
         )
 
     def format_project(self):

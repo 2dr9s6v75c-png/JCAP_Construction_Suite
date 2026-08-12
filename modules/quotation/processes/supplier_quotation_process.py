@@ -177,6 +177,14 @@ class SupplierQuotationProcess:
                     cursor=cursor,
                 )
 
+                if file_records:
+                    self._workflow_service.evaluate_completed(
+                        material_request["id"],
+                        current_user,
+                        trigger="Supplier Quotation files received",
+                        cursor=cursor,
+                    )
+
                 ActivityLogger.log_create(
                     cursor,
                     user_id=self._get_user_id(current_user),
@@ -370,6 +378,13 @@ class SupplierQuotationProcess:
                     quotation_id=quotation["id"],
                     copied_files=copied_files,
                     current_user=current_user,
+                    cursor=cursor,
+                )
+
+                self._workflow_service.evaluate_completed(
+                    quotation["material_request_id"],
+                    current_user,
+                    trigger="Supplier Quotation files received",
                     cursor=cursor,
                 )
 

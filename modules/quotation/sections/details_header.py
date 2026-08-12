@@ -214,6 +214,11 @@ class DetailsHeader(ctk.CTkFrame):
                 state="normal" if enabled else "disabled"
             )
 
+    def set_archive_workflow_state(self, workflow_status):
+        """Enable Archive only when the MR workflow is Completed."""
+        status = str(workflow_status or "").strip().lower()
+        self.set_archive_enabled(status == "completed")
+
     def set_record_state(self, state):
         """
         Supported values:
