@@ -85,6 +85,52 @@ RETURNING
 """
 
 
+_GET_AUTO_ASSIGNMENT_CANDIDATES_SQL = f"""
+SELECT
+    {_MATERIAL_REQUEST_COLUMNS},
+    EXTRACT(
+        EPOCH FROM (
+            CURRENT_TIMESTAMP - material_request.created_at
+        )
+    ) / 60.0 AS age_minutes
+FROM quotation.material_requests AS material_request
+WHERE material_request.status = 'New'
+  AND material_request.workflow_status = 'Submitted'
+  AND material_request.assigned_to IS NULL
+  AND material_request.current_assignment_id IS NULL
+  AND material_request.created_at <= (
+        CURRENT_TIMESTAMP - (%s * INTERVAL '1 minute')
+  )
+ORDER BY
+    material_request.created_at ASC,
+    material_request.id ASC;
+"""
+
+
+_CLAIM_NEXT_AUTO_ASSIGNMENT_CANDIDATE_SQL = f"""
+SELECT
+    {_MATERIAL_REQUEST_COLUMNS},
+    EXTRACT(
+        EPOCH FROM (
+            CURRENT_TIMESTAMP - material_request.created_at
+        )
+    ) / 60.0 AS age_minutes
+FROM quotation.material_requests AS material_request
+WHERE material_request.status = 'New'
+  AND material_request.workflow_status = 'Submitted'
+  AND material_request.assigned_to IS NULL
+  AND material_request.current_assignment_id IS NULL
+  AND material_request.created_at <= (
+        CURRENT_TIMESTAMP - (%s * INTERVAL '1 minute')
+  )
+ORDER BY
+    material_request.created_at ASC,
+    material_request.id ASC
+FOR UPDATE OF material_request SKIP LOCKED
+LIMIT 1;
+"""
+
+
 class MaterialRequestRepository(BaseRepository):
     """PostgreSQL repository for Material Request records."""
 
@@ -144,6 +190,114 @@ class MaterialRequestRepository(BaseRepository):
         return cls._map_material_request_row(
             row
         )
+
+    @classmethod
+    def get_auto_assignment_candidates(
+        cls,
+        threshold_minutes: int,
+        *,
+        cursor=None,
+    ) -> list[dict[str, Any]]:
+        """
+        Return New, unassigned Material Requests whose age meets or exceeds
+        the supplied auto-assignment threshold.
+
+        This is a read-only query. It does not lock or modify records.
+        PostgreSQL CURRENT_TIMESTAMP is used as the authoritative clock.
+        """
+        try:
+            normalized_threshold = int(threshold_minutes)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "Auto-assignment threshold must be a positive integer."
+            ) from exc
+
+        if normalized_threshold < 1:
+            raise ValueError(
+                "Auto-assignment threshold must be at least 1 minute."
+            )
+
+        rows = cls.fetch_all(
+            _GET_AUTO_ASSIGNMENT_CANDIDATES_SQL,
+            (normalized_threshold,),
+            cursor=cursor,
+        )
+
+        candidates: list[dict[str, Any]] = []
+
+        for row in rows:
+            mapped = cls._map_material_request_row(
+                row[:22]
+            )
+
+            if mapped is None:
+                continue
+
+            try:
+                age_minutes = float(row[22])
+            except (TypeError, ValueError):
+                age_minutes = 0.0
+
+            mapped["age_minutes"] = age_minutes
+            candidates.append(mapped)
+
+        return candidates
+
+    @classmethod
+    def claim_next_auto_assignment_candidate(
+        cls,
+        threshold_minutes: int,
+        *,
+        cursor,
+    ) -> dict[str, Any] | None:
+        """
+        Lock and return the oldest Material Request currently eligible for
+        auto-assignment.
+
+        This method must be called inside a caller-owned transaction.
+        FOR UPDATE SKIP LOCKED prevents two worker instances from claiming
+        the same Material Request concurrently.
+        """
+        if cursor is None:
+            raise ValueError(
+                "A shared transaction cursor is required to claim "
+                "an auto-assignment candidate."
+            )
+
+        try:
+            normalized_threshold = int(threshold_minutes)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "Auto-assignment threshold must be a positive integer."
+            ) from exc
+
+        if normalized_threshold < 1:
+            raise ValueError(
+                "Auto-assignment threshold must be at least 1 minute."
+            )
+
+        cursor.execute(
+            _CLAIM_NEXT_AUTO_ASSIGNMENT_CANDIDATE_SQL,
+            (normalized_threshold,),
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        mapped = cls._map_material_request_row(
+            row[:22]
+        )
+
+        if mapped is None:
+            return None
+
+        try:
+            mapped["age_minutes"] = float(row[22])
+        except (TypeError, ValueError):
+            mapped["age_minutes"] = 0.0
+
+        return mapped
 
     @classmethod
     def update_assignment_context(

@@ -51,6 +51,13 @@ class PersistentNotificationService:
         "REQUESTER_MATERIAL_REQUEST_REASSIGNED"
     )
 
+    MATERIAL_REQUEST_AUTO_ASSIGNED = (
+        "MATERIAL_REQUEST_AUTO_ASSIGNED"
+    )
+    REQUESTER_MATERIAL_REQUEST_AUTO_ASSIGNED = (
+        "REQUESTER_MATERIAL_REQUEST_AUTO_ASSIGNED"
+    )
+
     SUPPLIER_CLARIFICATION_RECORDED = (
         "SUPPLIER_CLARIFICATION_RECORDED"
     )
@@ -191,6 +198,102 @@ class PersistentNotificationService:
             entity_type=cls.ENTITY_MATERIAL_REQUEST,
             entity_id=material_request_id,
             created_by=assigned_by,
+            cursor=cursor,
+        )
+
+    # ============================================================
+    # MATERIAL REQUEST AUTO-ASSIGNED
+    # ============================================================
+
+    @classmethod
+    def notify_material_request_auto_assigned(
+        cls,
+        *,
+        recipient_user_id,
+        material_request_id,
+        mr_number: str,
+        auto_assigned_by=None,
+        threshold_minutes: int = 60,
+        cursor=None,
+    ) -> str | None:
+        """Notify the Purchasing Officer of an automatic assignment."""
+        if not recipient_user_id:
+            return None
+
+        material_request_id = cls._require_id(
+            material_request_id,
+            "Material Request ID is required.",
+        )
+        mr_number = cls._require_text(
+            mr_number,
+            "Material Request number is required.",
+        )
+        threshold_minutes = cls._normalize_threshold_minutes(
+            threshold_minutes
+        )
+
+        return cls._create(
+            recipient_user_id=recipient_user_id,
+            notification_type=cls.MATERIAL_REQUEST_AUTO_ASSIGNED,
+            title="Material Request Auto-Assigned",
+            message=(
+                f"Material Request {mr_number} was automatically "
+                f"assigned to you after remaining New and unassigned "
+                f"for {threshold_minutes} minutes."
+            ),
+            entity_type=cls.ENTITY_MATERIAL_REQUEST,
+            entity_id=material_request_id,
+            created_by=auto_assigned_by,
+            cursor=cursor,
+        )
+
+    @classmethod
+    def notify_requester_material_request_auto_assigned(
+        cls,
+        *,
+        recipient_user_id,
+        material_request_id,
+        mr_number: str,
+        purchasing_officer_name: str,
+        auto_assigned_by=None,
+        threshold_minutes: int = 60,
+        cursor=None,
+    ) -> str | None:
+        """Notify the Engineering requester of an automatic assignment."""
+        if not recipient_user_id:
+            return None
+
+        material_request_id = cls._require_id(
+            material_request_id,
+            "Material Request ID is required.",
+        )
+        mr_number = cls._require_text(
+            mr_number,
+            "Material Request number is required.",
+        )
+        purchasing_officer_name = cls._require_text(
+            purchasing_officer_name,
+            "Purchasing Officer name is required.",
+        )
+        threshold_minutes = cls._normalize_threshold_minutes(
+            threshold_minutes
+        )
+
+        return cls._create(
+            recipient_user_id=recipient_user_id,
+            notification_type=(
+                cls.REQUESTER_MATERIAL_REQUEST_AUTO_ASSIGNED
+            ),
+            title="Material Request Auto-Assigned",
+            message=(
+                f"Your Material Request {mr_number} was automatically "
+                f"assigned to {purchasing_officer_name} after "
+                f"remaining New and unassigned for "
+                f"{threshold_minutes} minutes."
+            ),
+            entity_type=cls.ENTITY_MATERIAL_REQUEST,
+            entity_id=material_request_id,
+            created_by=auto_assigned_by,
             cursor=cursor,
         )
 
@@ -742,6 +845,22 @@ class PersistentNotificationService:
             raise ValueError(error_message)
 
         return value
+
+    @staticmethod
+    def _normalize_threshold_minutes(value) -> int:
+        try:
+            minutes = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "Auto-assignment threshold must be a positive integer."
+            ) from exc
+
+        if minutes < 1:
+            raise ValueError(
+                "Auto-assignment threshold must be at least 1 minute."
+            )
+
+        return minutes
 
     @staticmethod
     def _require_text(
