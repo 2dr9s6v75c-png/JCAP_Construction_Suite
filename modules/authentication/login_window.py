@@ -1,4 +1,9 @@
+import os
+import sys
+
 import customtkinter as ctk
+from PIL import Image
+
 from config import settings
 from core.auth.auth_service import authenticate_user
 from core.database.connection import test_connection
@@ -20,6 +25,16 @@ class JCAPTheme:
     TEXT_MUTED = "#607D8B"
 
 
+def resource_path(relative_path):
+    """
+    Return the correct resource path in both:
+    - normal Python development mode
+    - PyInstaller packaged mode
+    """
+    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base_path, relative_path)
+
+
 class LoginWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -27,6 +42,20 @@ class LoginWindow(ctk.CTk):
         self.title(f"{settings.APP_NAME} v{settings.APP_VERSION}")
         self.geometry("1200x750")
         self.minsize(1000, 650)
+
+        # JCAP application/window icon
+        try:
+            self.iconbitmap(
+                resource_path(
+                    os.path.join(
+                        "assets",
+                        "icons",
+                        "jcap_app_icon.ico"
+                    )
+                )
+            )
+        except Exception as exc:
+            print(f"Unable to load JCAP window icon: {exc}")
 
         try:
             self.state("zoomed")
@@ -38,7 +67,11 @@ class LoginWindow(ctk.CTk):
     def build_login_ui(self):
         self.configure(fg_color=JCAPTheme.BG_LIGHT)
 
-        main_frame = ctk.CTkFrame(self, fg_color=JCAPTheme.BG_LIGHT, corner_radius=0)
+        main_frame = ctk.CTkFrame(
+            self,
+            fg_color=JCAPTheme.BG_LIGHT,
+            corner_radius=0
+        )
         main_frame.pack(fill="both", expand=True)
 
         login_card = ctk.CTkFrame(
@@ -48,24 +81,64 @@ class LoginWindow(ctk.CTk):
             fg_color=JCAPTheme.CARD_BG,
             corner_radius=20
         )
-        login_card.place(relx=0.5, rely=0.5, anchor="center")
-
-        logo_box = ctk.CTkFrame(
-            login_card,
-            width=80,
-            height=80,
-            fg_color=JCAPTheme.PRIMARY_BLUE,
-            corner_radius=18
+        login_card.place(
+            relx=0.5,
+            rely=0.5,
+            anchor="center"
         )
-        logo_box.pack(pady=(35, 15))
 
-        logo_text = ctk.CTkLabel(
-            logo_box,
-            text="JCAP",
-            font=("Segoe UI", 18, "bold"),
-            text_color="white"
-        )
-        logo_text.place(relx=0.5, rely=0.5, anchor="center")
+        # ---------------------------------------------------------
+        # JCAP BRANDING
+        # ---------------------------------------------------------
+        try:
+            logo_path = resource_path(
+                os.path.join(
+                    "assets",
+                    "icons",
+                    "jcap_full_logo.png"
+                )
+            )
+
+            logo_image = ctk.CTkImage(
+                light_image=Image.open(logo_path),
+                dark_image=Image.open(logo_path),
+                size=(105, 105)
+            )
+
+            logo_label = ctk.CTkLabel(
+                login_card,
+                image=logo_image,
+                text=""
+            )
+            logo_label.pack(pady=(25, 10))
+
+            # Keep a reference so Tkinter does not garbage-collect it.
+            self.logo_image = logo_image
+
+        except Exception as exc:
+            print(f"Unable to load JCAP logo: {exc}")
+
+            # Fallback to original logo if the image cannot be loaded.
+            logo_box = ctk.CTkFrame(
+                login_card,
+                width=80,
+                height=80,
+                fg_color=JCAPTheme.PRIMARY_BLUE,
+                corner_radius=18
+            )
+            logo_box.pack(pady=(35, 15))
+
+            logo_text = ctk.CTkLabel(
+                logo_box,
+                text="JCAP",
+                font=("Segoe UI", 18, "bold"),
+                text_color="white"
+            )
+            logo_text.place(
+                relx=0.5,
+                rely=0.5,
+                anchor="center"
+            )
 
         title = ctk.CTkLabel(
             login_card,
@@ -118,13 +191,22 @@ class LoginWindow(ctk.CTk):
         login_button.pack(pady=(20, 25))
 
         success, _ = test_connection()
-        status_text = "PostgreSQL Connected ✔" if success else "Database Connection Failed ✖"
+
+        status_text = (
+            "PostgreSQL Connected ✔"
+            if success
+            else "Database Connection Failed ✖"
+        )
 
         status_label = ctk.CTkLabel(
             login_card,
             text=status_text,
             font=("Segoe UI", 13, "bold"),
-            text_color=JCAPTheme.GREEN if success else JCAPTheme.RED
+            text_color=(
+                JCAPTheme.GREEN
+                if success
+                else JCAPTheme.RED
+            )
         )
         status_label.pack(pady=5)
 
@@ -140,11 +222,16 @@ class LoginWindow(ctk.CTk):
         username = self.username_entry.get().strip()
         password = self.password_entry.get().strip()
 
-        success, message, user = authenticate_user(username, password)
+        success, message, user = authenticate_user(
+            username,
+            password
+        )
 
         if success:
             self.destroy()
+
             main_window = MainWindow(user)
             main_window.mainloop()
+
         else:
             print("Login failed:", message)
