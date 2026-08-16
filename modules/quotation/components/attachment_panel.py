@@ -7,6 +7,7 @@ from typing import Any
 
 import customtkinter as ctk
 
+from core.documents.smb_login_dialog import SMBLoginDialog
 from core.notifications.notification_service import NotificationService
 from core.security.ownership_service import OwnershipService
 from modules.quotation.processes.material_request_attachment_process import (
@@ -460,6 +461,32 @@ class AttachmentPanel(ctk.CTkFrame):
         self._update_button_states()
 
     # ============================================================
+    # SMB ACCESS
+    # ============================================================
+
+    def _ensure_smb_access(self):
+        """
+        Ensure Windows has an authenticated SMB session to the
+        JCAP Synology document share.
+
+        Existing authenticated computers continue immediately.
+        New computers receive the Synology login dialog.
+        """
+        try:
+            return SMBLoginDialog.request_access(self)
+
+        except Exception as error:
+            NotificationService.error(
+                (
+                    "Unable to establish access to the "
+                    "JCAP Synology shared folder."
+                ),
+                title="Synology Access Failed",
+                error=error,
+            )
+            return False
+
+    # ============================================================
     # ACTIONS
     # ============================================================
 
@@ -493,6 +520,9 @@ class AttachmentPanel(ctk.CTkFrame):
         if not selected_files:
             return
 
+        if not self._ensure_smb_access():
+            return
+
         try:
             uploaded = self.attachment_process.upload_files(
                 material_request_id=self.material_request_id,
@@ -524,6 +554,9 @@ class AttachmentPanel(ctk.CTkFrame):
             )
             return
 
+        if not self._ensure_smb_access():
+            return
+
         try:
             self.attachment_process.open_attachment(
                 attachment["id"]
@@ -543,6 +576,9 @@ class AttachmentPanel(ctk.CTkFrame):
                 "Select an attachment first.",
                 title="Attachments",
             )
+            return
+
+        if not self._ensure_smb_access():
             return
 
         try:
@@ -607,6 +643,9 @@ class AttachmentPanel(ctk.CTkFrame):
         )
 
         if not confirmed:
+            return
+
+        if not self._ensure_smb_access():
             return
 
         try:
