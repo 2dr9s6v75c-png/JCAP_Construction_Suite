@@ -42,7 +42,9 @@ from modules.quotation.sections.details_header import DetailsHeader
 from modules.quotation.sections.information_tab import InformationTab
 from modules.quotation.sections.summary_cards import SummaryCards
 from modules.quotation.services.material_request_service import (
+    MaterialRequestStorageCleanupError,
     archive_material_request,
+    delete_material_request,
     get_material_request,
     get_material_request_activity,
     restore_material_request,
@@ -120,6 +122,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self.tabview = None
         self._realtime_refresh_after_id = None
         self._selected_tab_name = None
+        self._pending_full_rebuild = False
+        self._is_closing = False
+        self._is_deleted = False
 
         self.load_supplier_quotations(
             notify_on_error=False
@@ -166,6 +171,7 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             on_archive=self.archive_request,
             on_restore=self.restore_request,
             on_edit=self.edit_request,
+            on_delete=self.delete_request,
             on_back=self.on_back,
         )
 
@@ -236,6 +242,20 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                     self.request,
                 )
             )
+        )
+
+        can_delete = (
+            self.request is not None
+            and PermissionService.can_delete_material_request(
+                self.user
+            )
+        )
+
+        self.header.set_delete_visible(
+            visible=can_delete
+        )
+        self.header.set_delete_enabled(
+            enabled=can_delete
         )
 
     def build_summary(self):
@@ -1494,6 +1514,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
     # ============================================================
 
     def handle_realtime_event(self, event):
+        if self._is_closing or self._is_deleted:
+            return
+
         if not isinstance(event, dict):
             return
 
@@ -1538,6 +1561,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
         self,
         full_rebuild=False,
     ):
+        if self._is_closing or self._is_deleted:
+            return
+
         if self._realtime_refresh_after_id is not None:
             try:
                 self.after_cancel(
@@ -1557,6 +1583,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
 
     def _run_realtime_refresh(self):
         self._realtime_refresh_after_id = None
+
+        if self._is_closing or self._is_deleted:
+            return
 
         try:
             exists = self.winfo_exists()
@@ -1589,6 +1618,9 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
 
     def refresh_view_incrementally(self):
+        if self._is_closing or self._is_deleted:
+            return
+
         new_request = get_material_request(
             self.material_request_id
         )
@@ -1781,6 +1813,19 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
             )
         )
 
+        can_delete = (
+            self.request is not None
+            and PermissionService.can_delete_material_request(
+                self.user
+            )
+        )
+        self.header.set_delete_visible(
+            visible=can_delete
+        )
+        self.header.set_delete_enabled(
+            enabled=can_delete
+        )
+
     # ============================================================
     # DOCUMENT ACTIONS
     # ============================================================
@@ -1962,6 +2007,126 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
                 error=error,
             )
 
+    def delete_request(self):
+        if not self.request:
+            return
+
+        if not PermissionService.can_delete_material_request(
+            self.user
+        ):
+            NotificationService.error(
+                (
+                    "You do not have permission to permanently "
+                    "delete Material Requests."
+                ),
+                title="Permission Denied",
+            )
+            return
+
+        mr_number = str(
+            self.request.get("mr_number") or ""
+        ).strip()
+
+        if not mr_number:
+            NotificationService.error(
+                "The Material Request number is unavailable.",
+                title="Delete Material Request",
+            )
+            return
+
+        confirmation_dialog = ctk.CTkInputDialog(
+            title="Confirm Permanent Deletion",
+            text=(
+                "Permanent deletion cannot be undone.\n\n"
+                f"Material Request: {mr_number}\n\n"
+                "Type the exact MR number below to continue:"
+            ),
+        )
+
+        typed_mr_number = confirmation_dialog.get_input()
+
+        if typed_mr_number is None:
+            return
+
+        if typed_mr_number.strip() != mr_number:
+            NotificationService.warning(
+                (
+                    "The confirmation did not match the Material "
+                    "Request number. Nothing was deleted."
+                ),
+                title="Deletion Cancelled",
+            )
+            return
+
+        confirmed = NotificationService.confirm(
+            (
+                f"Permanently delete {mr_number}?\n\n"
+                "This will remove the Material Request, its related "
+                "database records, notifications, activity timeline "
+                "entries, and its managed Material Request folder.\n\n"
+                "This action cannot be undone."
+            ),
+            title="Permanent Delete",
+        )
+
+        if not confirmed:
+            return
+
+        if self.header:
+            self.header.set_delete_enabled(False)
+
+        try:
+            deleted_mr_number = delete_material_request(
+                self.material_request_id,
+                self.user,
+            )
+
+            self._prepare_for_close(
+                deleted=True
+            )
+
+            NotificationService.success(
+                (
+                    f"Material Request {deleted_mr_number} "
+                    "was permanently deleted."
+                ),
+                title="Delete Complete",
+            )
+
+            self.navigate_back()
+
+        except MaterialRequestStorageCleanupError as error:
+            self._prepare_for_close(
+                deleted=True
+            )
+
+            NotificationService.warning(
+                (
+                    f"Material Request {error.mr_number} was deleted "
+                    "from the database, but its managed folder could "
+                    "not be removed automatically.\n\n"
+                    "The database deletion is permanent. Please have "
+                    "an authorized administrator review the leftover "
+                    "folder."
+                ),
+                title="Delete Complete - Folder Cleanup Required",
+            )
+
+            self.navigate_back()
+
+        except Exception as error:
+            if self.header and self.winfo_exists():
+                self.header.set_delete_enabled(True)
+
+            NotificationService.error(
+                (
+                    "Unable to permanently delete the "
+                    "Material Request."
+                ),
+                title="Delete Failed",
+                error=error,
+            )
+
     # ============================================================
     # COLLABORATION AND LOCK STATE
     # ============================================================
@@ -2057,6 +2222,24 @@ class MaterialRequestDetailsView(ctk.CTkFrame):
     # ============================================================
     # NAVIGATION
     # ============================================================
+
+    def _prepare_for_close(self, deleted=False):
+        self._is_closing = True
+
+        if deleted:
+            self._is_deleted = True
+
+        if self._realtime_refresh_after_id is not None:
+            try:
+                self.after_cancel(
+                    self._realtime_refresh_after_id
+                )
+            except Exception:
+                pass
+
+            self._realtime_refresh_after_id = None
+
+        self._pending_full_rebuild = False
 
     def navigate_back(self):
         if self.on_back:

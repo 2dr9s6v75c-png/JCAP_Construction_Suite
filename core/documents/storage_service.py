@@ -8,6 +8,7 @@ from core.documents.document_paths import (
     get_project_folder,
     get_project_procurement_folders,
     get_material_request_folder,
+    get_material_requests_root,
 )
 
 
@@ -258,4 +259,67 @@ def delete_empty_supplier_quotation_folder(
     except OSError:
         return False
 
+    return True
+
+def delete_material_request_folder(
+    project_code: str,
+    project_name: str,
+    folder_name: str,
+    *,
+    missing_ok: bool = True,
+) -> bool:
+    """
+    Permanently delete exactly one managed Material Request folder tree.
+
+    Safety rules:
+    - The target path is derived only from JCAP document path helpers.
+    - The target must remain inside the project's "01 Material Requests" root.
+    - The Material Requests root itself can never be deleted.
+    - The project root and sibling MR folders are never touched.
+    - A missing folder may be treated as already cleaned.
+
+    Returns:
+        True if the folder existed and was deleted.
+        False if it did not exist and missing_ok=True.
+    """
+    safe_folder_name = sanitize_folder_name(folder_name)
+
+    material_requests_root = get_material_requests_root(
+        project_code,
+        project_name,
+    ).resolve(strict=False)
+
+    target_folder = get_material_request_folder(
+        project_code,
+        project_name,
+        safe_folder_name,
+    ).resolve(strict=False)
+
+    if target_folder == material_requests_root:
+        raise ValueError(
+            "Refusing to delete the Material Requests root folder."
+        )
+
+    try:
+        target_folder.relative_to(material_requests_root)
+    except ValueError as exc:
+        raise ValueError(
+            "Refusing to delete a path outside the managed "
+            "Material Requests folder."
+        ) from exc
+
+    if not target_folder.exists():
+        if missing_ok:
+            return False
+
+        raise FileNotFoundError(
+            f"Material Request folder was not found: {target_folder}"
+        )
+
+    if not target_folder.is_dir():
+        raise ValueError(
+            f"Material Request path is not a directory: {target_folder}"
+        )
+
+    shutil.rmtree(target_folder)
     return True

@@ -14,6 +14,7 @@ class DetailsHeader(ctk.CTkFrame):
         on_archive=None,
         on_restore=None,
         on_edit=None,
+        on_delete=None,
         on_back=None,
     ):
         super().__init__(
@@ -30,12 +31,14 @@ class DetailsHeader(ctk.CTkFrame):
         self.on_archive = on_archive
         self.on_restore = on_restore
         self.on_edit = on_edit
+        self.on_delete = on_delete
         self.on_back = on_back
 
         self.assignment_button = None
         self.edit_button = None
         self.archive_button = None
         self.restore_button = None
+        self.delete_button = None
 
         self.build_ui()
 
@@ -137,6 +140,19 @@ class DetailsHeader(ctk.CTkFrame):
             padx=5,
         )
 
+        self.delete_button = ctk.CTkButton(
+            button_frame,
+            text="Delete",
+            width=100,
+            fg_color="#C62828",
+            hover_color="#8E0000",
+            command=self.on_delete,
+        )
+        self.delete_button.pack(
+            side="left",
+            padx=5,
+        )
+
         ctk.CTkButton(
             button_frame,
             text="Back",
@@ -213,6 +229,25 @@ class DetailsHeader(ctk.CTkFrame):
             self.archive_button.configure(
                 state="normal" if enabled else "disabled"
             )
+
+    def set_delete_enabled(self, enabled=True):
+        if self.delete_button:
+            self.delete_button.configure(
+                state="normal" if enabled else "disabled"
+            )
+
+    def set_delete_visible(self, visible=True):
+        if not self.delete_button:
+            return
+
+        if visible:
+            if not self.delete_button.winfo_manager():
+                self.delete_button.pack(
+                    side="left",
+                    padx=5,
+                )
+        elif self.delete_button.winfo_manager():
+            self.delete_button.pack_forget()
 
     def set_archive_workflow_state(self, workflow_status):
         """Enable Archive only when the MR workflow is Completed."""

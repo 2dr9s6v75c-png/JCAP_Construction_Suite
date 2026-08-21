@@ -61,6 +61,7 @@ class PermissionService:
         "material_request.reassign": "material_requests.reassign",
         "material_request.archive": "material_requests.archive",
         "material_request.restore": "material_requests.restore",
+        "material_request.delete": "material_requests.delete",
         "material_request.force_unlock": (
             "material_requests.force_unlock"
         ),
@@ -312,6 +313,13 @@ class PermissionService:
         return cls.has_permission(
             user,
             "material_requests.restore",
+        )
+
+    @classmethod
+    def can_delete_material_request(cls, user):
+        return cls.has_permission(
+            user,
+            "material_requests.delete",
         )
 
     @classmethod

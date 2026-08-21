@@ -1,7 +1,10 @@
 from datetime import datetime
 
 from core.database.connection import get_connection
-from core.documents.storage_service import copy_attachments_to_request_folder
+from core.documents.storage_service import (
+    copy_attachments_to_request_folder,
+    delete_material_request_folder,
+)
 from core.lifecycle.document_lifecycle import DocumentLifecycle
 from core.logging.activity_logger import ActivityLogger
 from core.notifications.persistent_notification_service import (
@@ -11,6 +14,9 @@ from core.numbering.numbering_service import generate_document_number
 from core.security.permissions import PermissionService
 from core.realtime.realtime_event_service import RealtimeEventService
 from core.workflow.material_request_workflow import MaterialRequestState
+from modules.quotation.repositories.material_request_repository import (
+    MaterialRequestRepository,
+)
 
 
 LOCK_TIMEOUT_MINUTES = 30
@@ -1180,3 +1186,197 @@ def restore_material_request(
     finally:
         cur.close()
         conn.close()
+
+# ============================================================
+# PERMANENT DELETE
+# ============================================================
+
+class MaterialRequestStorageCleanupError(RuntimeError):
+    """
+    Raised only after the database deletion has already committed but
+    the managed Material Request folder could not be removed.
+    """
+
+    def __init__(
+        self,
+        mr_number: str,
+        original_error: Exception,
+    ):
+        self.mr_number = mr_number
+        self.original_error = original_error
+
+        super().__init__(
+            (
+                f"Material Request {mr_number} was permanently deleted "
+                "from the database, but its managed folder could not be "
+                f"removed: {original_error}"
+            )
+        )
+
+
+def delete_material_request(
+    material_request_id: str,
+    user: dict,
+) -> str:
+    """
+    Permanently delete one Material Request.
+
+    Database cleanup is transactional. After the database commit succeeds,
+    the managed Material Request folder is removed with the guarded storage
+    helper. Production MR numbering is intentionally NOT reset or reused
+    automatically by this function.
+    """
+    if not PermissionService.can_delete_material_request(user):
+        raise PermissionError(
+            "You do not have permission to permanently delete "
+            "Material Requests."
+        )
+
+    if not material_request_id:
+        raise ValueError("Material Request ID is required.")
+
+    user_id = (user or {}).get("id")
+
+    if not user_id:
+        raise PermissionError(
+            "A valid signed-in user is required to permanently delete "
+            "a Material Request."
+        )
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    mr_number = None
+    project_code = None
+    project_name = None
+    folder_name = None
+
+    try:
+        material_request = MaterialRequestRepository.get_by_id_for_update(
+            material_request_id,
+            cursor=cur,
+        )
+
+        if not material_request:
+            raise ValueError("Material Request not found.")
+
+        mr_number = str(
+            material_request.get("mr_number") or ""
+        ).strip()
+
+        if not mr_number:
+            raise ValueError(
+                "Material Request number is unavailable."
+            )
+
+        # Respect an active collaboration lock owned by another user.
+        locked_by = material_request.get("locked_by")
+        lock_expires_at = material_request.get("lock_expires_at")
+
+        if (
+            locked_by
+            and lock_expires_at
+            and lock_expires_at > datetime.now()
+            and str(locked_by) != str(user_id)
+        ):
+            raise ValueError(
+                "This Material Request is currently locked by another "
+                "user and cannot be permanently deleted."
+            )
+
+        folder_name = str(
+            material_request.get("folder_name")
+            or mr_number
+        ).strip()
+
+        cur.execute(
+            """
+            SELECT
+                project_code,
+                project_name
+            FROM master.projects
+            WHERE id = %s
+            """,
+            (material_request.get("project_id"),),
+        )
+
+        project_row = cur.fetchone()
+
+        if not project_row:
+            raise ValueError(
+                "The Material Request project could not be resolved."
+            )
+
+        project_code = str(project_row[0] or "").strip()
+        project_name = str(project_row[1] or "").strip()
+
+        if not project_name:
+            raise ValueError(
+                "The Material Request project name is unavailable."
+            )
+
+        # supplier_quotations uses ON DELETE RESTRICT.
+        # supplier_quotation_files cascades from those quotation rows.
+        MaterialRequestRepository.delete_supplier_quotations(
+            material_request_id,
+            cursor=cur,
+        )
+
+        # These traces do not use a direct Material Request FK.
+        MaterialRequestRepository.delete_activity_logs(
+            material_request_id,
+            cursor=cur,
+        )
+        MaterialRequestRepository.delete_notifications(
+            material_request_id,
+            cursor=cur,
+        )
+
+        deleted_mr_number = MaterialRequestRepository.delete(
+            material_request_id,
+            cursor=cur,
+        )
+
+        if not deleted_mr_number:
+            raise ValueError(
+                "Material Request could not be deleted."
+            )
+
+        RealtimeEventService.publish(
+            "material_request_deleted",
+            entity_type="material_request",
+            entity_id=material_request_id,
+            action="deleted",
+            actor_user_id=user_id,
+            data={"mr_number": mr_number},
+            cursor=cur,
+        )
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cur.close()
+        conn.close()
+
+    # Filesystem deletion happens only after the database transaction has
+    # committed. A storage failure therefore cannot corrupt or partially
+    # roll back the database delete.
+    try:
+        delete_material_request_folder(
+            project_code=project_code,
+            project_name=project_name,
+            folder_name=folder_name,
+            missing_ok=True,
+        )
+
+    except Exception as error:
+        raise MaterialRequestStorageCleanupError(
+            mr_number,
+            error,
+        ) from error
+
+    return mr_number

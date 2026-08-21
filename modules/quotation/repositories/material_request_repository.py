@@ -131,6 +131,40 @@ LIMIT 1;
 """
 
 
+_GET_BY_ID_FOR_UPDATE_SQL = f"""
+SELECT
+    {_MATERIAL_REQUEST_COLUMNS}
+FROM quotation.material_requests AS material_request
+WHERE material_request.id = %s
+FOR UPDATE OF material_request;
+"""
+
+
+_DELETE_SUPPLIER_QUOTATIONS_SQL = """
+DELETE FROM quotation.supplier_quotations
+WHERE material_request_id = %s;
+"""
+
+
+_DELETE_ACTIVITY_LOGS_SQL = """
+DELETE FROM core.activity_logs
+WHERE record_id = %s;
+"""
+
+
+_DELETE_NOTIFICATIONS_SQL = """
+DELETE FROM core.notifications
+WHERE entity_id = %s;
+"""
+
+
+_DELETE_MATERIAL_REQUEST_SQL = """
+DELETE FROM quotation.material_requests
+WHERE id = %s
+RETURNING mr_number;
+"""
+
+
 class MaterialRequestRepository(BaseRepository):
     """PostgreSQL repository for Material Request records."""
 
@@ -298,6 +332,95 @@ class MaterialRequestRepository(BaseRepository):
             mapped["age_minutes"] = 0.0
 
         return mapped
+
+    @classmethod
+    def get_by_id_for_update(
+        cls,
+        material_request_id: UUID,
+        *,
+        cursor,
+    ) -> dict[str, Any] | None:
+        """Lock and return one Material Request inside a caller transaction."""
+        if cursor is None:
+            raise ValueError(
+                "A shared transaction cursor is required to lock "
+                "a Material Request."
+            )
+
+        cursor.execute(
+            _GET_BY_ID_FOR_UPDATE_SQL,
+            (material_request_id,),
+        )
+        return cls._map_material_request_row(cursor.fetchone())
+
+    @classmethod
+    def delete_supplier_quotations(
+        cls,
+        material_request_id: UUID,
+        *,
+        cursor,
+    ) -> int:
+        """Remove Supplier Quotations that RESTRICT direct MR deletion."""
+        if cursor is None:
+            raise ValueError("A shared transaction cursor is required.")
+
+        cursor.execute(
+            _DELETE_SUPPLIER_QUOTATIONS_SQL,
+            (material_request_id,),
+        )
+        return cursor.rowcount
+
+    @classmethod
+    def delete_activity_logs(
+        cls,
+        material_request_id: UUID,
+        *,
+        cursor,
+    ) -> int:
+        """Remove non-FK activity-log traces for one Material Request."""
+        if cursor is None:
+            raise ValueError("A shared transaction cursor is required.")
+
+        cursor.execute(
+            _DELETE_ACTIVITY_LOGS_SQL,
+            (material_request_id,),
+        )
+        return cursor.rowcount
+
+    @classmethod
+    def delete_notifications(
+        cls,
+        material_request_id: UUID,
+        *,
+        cursor,
+    ) -> int:
+        """Remove non-FK notification traces for one Material Request."""
+        if cursor is None:
+            raise ValueError("A shared transaction cursor is required.")
+
+        cursor.execute(
+            _DELETE_NOTIFICATIONS_SQL,
+            (material_request_id,),
+        )
+        return cursor.rowcount
+
+    @classmethod
+    def delete(
+        cls,
+        material_request_id: UUID,
+        *,
+        cursor,
+    ) -> str | None:
+        """Delete the MR; direct CASCADE children are handled by PostgreSQL."""
+        if cursor is None:
+            raise ValueError("A shared transaction cursor is required.")
+
+        cursor.execute(
+            _DELETE_MATERIAL_REQUEST_SQL,
+            (material_request_id,),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
 
     @classmethod
     def update_assignment_context(
